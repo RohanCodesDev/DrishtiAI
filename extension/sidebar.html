@@ -18,6 +18,10 @@
       <div class="actions">
         <button id="copy-btn" class="btn" title="Copy JSON">Copy</button>
         <button id="refresh-btn" class="btn" title="Refresh DOM">Refresh</button>
+        <button id="settings-toggle-btn" class="btn btn-settings" title="Privacy Firewall Settings">
+          <span class="gear-icon">⚙️</span>
+          <span class="btn-label">Firewall</span>
+        </button>
       </div>
     </header>
 
@@ -26,16 +30,16 @@
       <span class="page-title" id="page-title">Detecting page...</span>
     </div>
 
-    <!-- Firewall Settings -->
-    <div class="settings-panel">
-      <div class="settings-header">Privacy Firewall (Allowed PII)</div>
-      <div class="settings-grid">
-        <label><input type="checkbox" class="pii-toggle" data-pii-type="email"> Email</label>
-        <label><input type="checkbox" class="pii-toggle" data-pii-type="phone"> Phone</label>
-        <label><input type="checkbox" class="pii-toggle" data-pii-type="ssn"> SSN</label>
-        <label><input type="checkbox" class="pii-toggle" data-pii-type="credit_card"> Credit Card</label>
-        <label><input type="checkbox" class="pii-toggle" data-pii-type="aadhaar"> Aadhaar</label>
-        <label><input type="checkbox" class="pii-toggle" data-pii-type="pan_card"> PAN</label>
+    <!-- Active Firewall Summary Pill -->
+    <div class="firewall-status-strip" id="firewall-status-strip" title="Click to configure Privacy Firewall">
+      <div class="status-left">
+        <span class="status-dot"></span>
+        <span id="firewall-status-text">Shield Active: 10 Rules</span>
+      </div>
+      <div class="status-right" id="firewall-tags-summary">
+        <span class="tag-pill tag-bl" id="bl-count-pill" title="Custom Blacklist">0 BL</span>
+        <span class="tag-pill tag-wl" id="wl-count-pill" title="Custom Whitelist">0 WL</span>
+        <span class="chevron">›</span>
       </div>
     </div>
 
@@ -43,6 +47,163 @@
     <main class="json-container">
       <pre id="json-output">Loading DOM structure...</pre>
     </main>
+
+    <!-- Slide-over / Modal Settings Pane -->
+    <div id="settings-pane" class="settings-pane" aria-hidden="true">
+      <div class="settings-backdrop" id="settings-backdrop"></div>
+      <div class="settings-content">
+        
+        <!-- Settings Header -->
+        <div class="settings-pane-header">
+          <div class="pane-title-group">
+            <span class="pane-icon">🛡️</span>
+            <h3>Privacy Firewall</h3>
+          </div>
+          <button id="close-settings-btn" class="icon-btn" title="Close Settings">✕</button>
+        </div>
+
+        <div class="settings-scroll-body">
+          
+          <!-- Preset Action Buttons -->
+          <div class="presets-row">
+            <button id="preset-protect-all" class="preset-btn" title="Enable all built-in PII redactions">Protect All</button>
+            <button id="preset-allow-all" class="preset-btn" title="Disable all built-in PII redactions">Allow All</button>
+            <button id="preset-reset" class="preset-btn" title="Reset all settings to default">Reset</button>
+          </div>
+
+          <!-- Section 1: Built-in PII Rules -->
+          <div class="settings-section">
+            <div class="section-title">Built-in PII Detectors</div>
+            <div class="section-subtitle">Toggled ON = Redact and protect this data type locally</div>
+            
+            <div class="rules-list">
+              
+              <label class="rule-item">
+                <div class="rule-info">
+                  <span class="rule-name">Email Addresses</span>
+                  <span class="rule-desc">user@domain.com</span>
+                </div>
+                <input type="checkbox" class="rule-toggle" data-rule="email" checked>
+                <span class="toggle-slider"></span>
+              </label>
+
+              <label class="rule-item">
+                <div class="rule-info">
+                  <span class="rule-name">Phone Numbers</span>
+                  <span class="rule-desc">US, Indian Mobile (+91), International</span>
+                </div>
+                <input type="checkbox" class="rule-toggle" data-rule="phone" checked>
+                <span class="toggle-slider"></span>
+              </label>
+
+              <label class="rule-item">
+                <div class="rule-info">
+                  <span class="rule-name">Credit & Debit Cards</span>
+                  <span class="rule-desc">Visa, Mastercard, Amex, RuPay (Luhn check)</span>
+                </div>
+                <input type="checkbox" class="rule-toggle" data-rule="credit_card" checked>
+                <span class="toggle-slider"></span>
+              </label>
+
+              <label class="rule-item">
+                <div class="rule-info">
+                  <span class="rule-name">Social Security Numbers</span>
+                  <span class="rule-desc">US SSN (XXX-XX-XXXX)</span>
+                </div>
+                <input type="checkbox" class="rule-toggle" data-rule="ssn" checked>
+                <span class="toggle-slider"></span>
+              </label>
+
+              <label class="rule-item">
+                <div class="rule-info">
+                  <span class="rule-name">Aadhaar Numbers (India)</span>
+                  <span class="rule-desc">12-digit UID (XXXX-XXXX-XXXX)</span>
+                </div>
+                <input type="checkbox" class="rule-toggle" data-rule="aadhaar" checked>
+                <span class="toggle-slider"></span>
+              </label>
+
+              <label class="rule-item">
+                <div class="rule-info">
+                  <span class="rule-name">PAN Cards (India)</span>
+                  <span class="rule-desc">10-digit Tax ID (ABCDE1234F)</span>
+                </div>
+                <input type="checkbox" class="rule-toggle" data-rule="pan_card" checked>
+                <span class="toggle-slider"></span>
+              </label>
+
+              <label class="rule-item">
+                <div class="rule-info">
+                  <span class="rule-name">API Keys & JWT Secrets</span>
+                  <span class="rule-desc">sk_live, ghp, Bearer tokens, eyJ...</span>
+                </div>
+                <input type="checkbox" class="rule-toggle" data-rule="api_key" checked>
+                <span class="toggle-slider"></span>
+              </label>
+
+              <label class="rule-item">
+                <div class="rule-info">
+                  <span class="rule-name">IP Addresses</span>
+                  <span class="rule-desc">IPv4 & IPv6 network addresses</span>
+                </div>
+                <input type="checkbox" class="rule-toggle" data-rule="ip_address" checked>
+                <span class="toggle-slider"></span>
+              </label>
+
+              <label class="rule-item">
+                <div class="rule-info">
+                  <span class="rule-name">Crypto Wallets</span>
+                  <span class="rule-desc">Ethereum 0x..., Bitcoin bc1...</span>
+                </div>
+                <input type="checkbox" class="rule-toggle" data-rule="crypto_wallet" checked>
+                <span class="toggle-slider"></span>
+              </label>
+
+              <label class="rule-item">
+                <div class="rule-info">
+                  <span class="rule-name">Passport Numbers</span>
+                  <span class="rule-desc">US & International passport IDs</span>
+                </div>
+                <input type="checkbox" class="rule-toggle" data-rule="passport" checked>
+                <span class="toggle-slider"></span>
+              </label>
+
+            </div>
+          </div>
+
+          <!-- Section 2: Custom Blacklist -->
+          <div class="settings-section">
+            <div class="section-title">Custom Blacklist (Always Redact)</div>
+            <div class="section-subtitle">Always mask matching terms as [BLACKLIST_REDACTED]</div>
+            
+            <form id="blacklist-form" class="input-group">
+              <input type="text" id="blacklist-input" class="text-input" placeholder="e.g. SecretProject, John Doe, /regex/i" autocomplete="off">
+              <button type="submit" class="btn btn-add" id="add-blacklist-btn">+ Add</button>
+            </form>
+
+            <div id="blacklist-tags" class="tags-list">
+              <!-- Dynamically populated tags -->
+            </div>
+          </div>
+
+          <!-- Section 3: Custom Whitelist -->
+          <div class="settings-section">
+            <div class="section-title">Custom Whitelist (Always Allow)</div>
+            <div class="section-subtitle">Preserve matching terms pristine (never redacted)</div>
+            
+            <form id="whitelist-form" class="input-group">
+              <input type="text" id="whitelist-input" class="text-input" placeholder="e.g. support@drishti.ai, public-key" autocomplete="off">
+              <button type="submit" class="btn btn-add" id="add-whitelist-btn">+ Add</button>
+            </form>
+
+            <div id="whitelist-tags" class="tags-list">
+              <!-- Dynamically populated tags -->
+            </div>
+          </div>
+
+        </div>
+      </div>
+    </div>
 
   </div>
 

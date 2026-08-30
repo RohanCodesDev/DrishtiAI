@@ -23,7 +23,7 @@ function isRestrictedUrl(url) {
 }
 
 // Fetch structured DOM from target tab with automatic content script injection fallback
-async function getTabDOM(targetTabId) {
+async function getTabDOM(targetTabId, config = null) {
   let tabId = targetTabId;
   let tabUrl = '';
 
@@ -50,25 +50,39 @@ async function getTabDOM(targetTabId) {
     throw err;
   }
 
-  // Attempt 1: Try sending message to existing content script in the target tab
+  // Attempt 1: Try sending message to active content script v2 in target tab
   try {
-    const response = await chrome.tabs.sendMessage(tabId, { type: 'GET_DOM' });
-    if (response && response.success && response.data) {
-      return response.data;
+    const pingRes = await chrome.tabs.sendMessage(tabId, { type: 'PING' }).catch(() => null);
+    if (pingRes && pingRes.version === 2) {
+      const response = await chrome.tabs.sendMessage(tabId, { type: 'GET_DOM', config });
+      if (response && response.success && response.data) {
+        return response.data;
+      }
     }
   } catch (msgErr) {
-    // Content script may not be loaded yet in this tab; proceed to fallback injection
+    // Content script may not be loaded; proceed to injection
   }
 
-  // Attempt 2: Inject content script dynamically and retrieve structured DOM
+  // Attempt 2: Inject content script dynamically and retrieve structured DOM directly
   try {
-    const injectionResults = await chrome.scripting.executeScript({
+    await chrome.scripting.executeScript({
       target: { tabId },
       files: ['content.js']
     });
 
-    if (injectionResults && injectionResults[0] && injectionResults[0].result) {
-      return injectionResults[0].result;
+    const executionResults = await chrome.scripting.executeScript({
+      target: { tabId },
+      func: async (cfg) => {
+        if (window.__DrishtiFirewall && typeof window.__DrishtiFirewall.getStructuredDOM === 'function') {
+          return await window.__DrishtiFirewall.getStructuredDOM(cfg);
+        }
+        return null;
+      },
+      args: [config]
+    });
+
+    if (executionResults && executionResults[0] && executionResults[0].result) {
+      return executionResults[0].result;
     }
   } catch (injectErr) {
     throw new Error(`INJECTION_FAILED: ${injectErr.message}`);
@@ -82,7 +96,7 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
   if (message && (message.type === 'GET_DOM' || message.type === 'GET_PAGE_CONTEXT')) {
     (async () => {
       try {
-        const domData = await getTabDOM(message.tabId);
+        const domData = await getTabDOM(message.tabId, message.config);
         sendResponse({ success: true, data: domData });
       } catch (err) {
         sendResponse({
@@ -94,5 +108,44 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
       }
     })();
     return true; // Keep channel open for async sendResponse
+  }
+
+  if (message && message.type === 'FIREWALL_CONFIG_UPDATED') {
+    (async () => {
+      try {
+        let tabId = message.tabId;
+        if (!tabId) {
+          const [activeTab] = await chrome.tabs.query({ active: true, currentWindow: true });
+          tabId = activeTab?.id;
+        }
+
+        if (tabId) {
+          try {
+            const pingRes = await chrome.tabs.sendMessage(tabId, { type: 'PING' }).catch(() => null);
+            if (pingRes && pingRes.version === 2) {
+              const response = await chrome.tabs.sendMessage(tabId, {
+                type: 'FIREWALL_CONFIG_UPDATED',
+                config: message.config
+              });
+              if (response && response.success && response.data) {
+                sendResponse({ success: true, data: response.data });
+                return;
+              }
+            }
+          } catch (e) {
+            // fallback
+          }
+        }
+        const domData = await getTabDOM(tabId, message.config);
+        sendResponse({ success: true, data: domData });
+      } catch (err) {
+        sendResponse({
+          success: false,
+          error: err.code || 'DOM_EXTRACTION_ERROR',
+          message: err.message
+        });
+      }
+    })();
+    return true;
   }
 });
