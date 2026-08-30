@@ -1,7 +1,7 @@
 // This file is injected into the webpage the user is viewing.
 
 // Helper function to detect and redact PII using Regular Expressions
-function processPII(text) {
+function processPII(text, allowedConfig = {}) {
   if (typeof text !== 'string') return { redactedText: text, piiTypes: [] };
   
   let redactedText = text;
@@ -9,50 +9,68 @@ function processPII(text) {
   
   // Basic Email Regex (with global flag)
   const emailRegex = /\b[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Z|a-z]{2,}\b/g;
-  if (emailRegex.test(redactedText)) {
+  if (redactedText.match(emailRegex)) {
     piiTypes.push('email');
-    redactedText = redactedText.replace(emailRegex, '[EMAIL_REDACTED]');
+    if (!allowedConfig.email) {
+      redactedText = redactedText.replace(emailRegex, '[EMAIL_REDACTED]');
+    }
   }
 
   // Basic Phone Regex (with global flag)
   const phoneRegex = /\b\d{3}[-.\s]?\d{3}[-.\s]?\d{4}\b/g;
-  if (phoneRegex.test(redactedText)) {
+  if (redactedText.match(phoneRegex)) {
     piiTypes.push('phone');
-    redactedText = redactedText.replace(phoneRegex, '[PHONE_REDACTED]');
+    if (!allowedConfig.phone) {
+      redactedText = redactedText.replace(phoneRegex, '[PHONE_REDACTED]');
+    }
   }
 
   // Social Security Number Regex (with global flag)
   const ssnRegex = /\b\d{3}[-.\s]?\d{2}[-.\s]?\d{4}\b/g;
-  if (ssnRegex.test(redactedText)) {
+  if (redactedText.match(ssnRegex)) {
     piiTypes.push('ssn');
-    redactedText = redactedText.replace(ssnRegex, '[SSN_REDACTED]');
+    if (!allowedConfig.ssn) {
+      redactedText = redactedText.replace(ssnRegex, '[SSN_REDACTED]');
+    }
   }
 
   // Credit Card Regex (Basic 13-16 digits with global flag)
   const ccRegex = /\b(?:\d[ -]*?){13,16}\b/g;
-  if (ccRegex.test(redactedText)) {
+  if (redactedText.match(ccRegex)) {
     piiTypes.push('credit_card');
-    redactedText = redactedText.replace(ccRegex, '[CREDIT_CARD_REDACTED]');
+    if (!allowedConfig.credit_card) {
+      redactedText = redactedText.replace(ccRegex, '[CREDIT_CARD_REDACTED]');
+    }
   }
 
   // Aadhaar Card Regex (India - 12 digits)
   const aadhaarRegex = /\b\d{4}[ -]?\d{4}[ -]?\d{4}\b/g;
-  if (aadhaarRegex.test(redactedText)) {
+  if (redactedText.match(aadhaarRegex)) {
     piiTypes.push('aadhaar');
-    redactedText = redactedText.replace(aadhaarRegex, '[AADHAAR_REDACTED]');
+    if (!allowedConfig.aadhaar) {
+      redactedText = redactedText.replace(aadhaarRegex, '[AADHAAR_REDACTED]');
+    }
   }
 
   // PAN Card Regex (India - 5 letters, 4 numbers, 1 letter)
   const panRegex = /\b[A-Z]{5}\d{4}[A-Z]{1}\b/gi;
-  if (panRegex.test(redactedText)) {
+  if (redactedText.match(panRegex)) {
     piiTypes.push('pan_card');
-    redactedText = redactedText.replace(panRegex, '[PAN_REDACTED]');
+    if (!allowedConfig.pan_card) {
+      redactedText = redactedText.replace(panRegex, '[PAN_REDACTED]');
+    }
   }
 
   return { redactedText, piiTypes };
 }
 
-function getStructuredDOM() {
+async function getStructuredDOM() {
+  let allowedConfig = {};
+  if (typeof chrome !== 'undefined' && chrome.storage && chrome.storage.local) {
+    const storageData = await chrome.storage.local.get('piiConfig');
+    allowedConfig = storageData.piiConfig || {};
+  }
+
   const IGNORED_TAGS = new Set([
     'SCRIPT', 'STYLE', 'NOSCRIPT', 'TEMPLATE', 'LINK', 'META', 'HEAD'
   ]);
@@ -305,7 +323,7 @@ function getStructuredDOM() {
     const nodePIITypes = new Set();
 
     if (hasText) {
-      const { redactedText, piiTypes } = processPII(directText);
+      const { redactedText, piiTypes } = processPII(directText, allowedConfig);
       nodeObj.text = redactedText;
       
       if (piiTypes.length > 0) {
@@ -317,7 +335,7 @@ function getStructuredDOM() {
     if (hasAttributes) {
       for (const [key, val] of Object.entries(attributes)) {
         if (typeof val === 'string') {
-          const { redactedText, piiTypes } = processPII(val);
+          const { redactedText, piiTypes } = processPII(val, allowedConfig);
           if (piiTypes.length > 0) {
             attributes[key] = redactedText;
             nodeHasPII = true;
@@ -387,12 +405,14 @@ function getStructuredDOM() {
 if (typeof chrome !== 'undefined' && chrome.runtime && chrome.runtime.onMessage) {
   chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
     if (message && (message.type === 'GET_DOM' || message.type === 'GET_PAGE_CONTEXT')) {
-      try {
-        const domData = getStructuredDOM();
-        sendResponse({ success: true, data: domData });
-      } catch (err) {
-        sendResponse({ success: false, error: err.message });
-      }
+      (async () => {
+        try {
+          const domData = await getStructuredDOM();
+          sendResponse({ success: true, data: domData });
+        } catch (err) {
+          sendResponse({ success: false, error: err.message });
+        }
+      })();
       return true;
     }
     if (message && message.type === 'PING') {

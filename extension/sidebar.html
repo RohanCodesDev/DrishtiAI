@@ -26,6 +26,19 @@
       <span class="page-title" id="page-title">Detecting page...</span>
     </div>
 
+    <!-- Firewall Settings -->
+    <div class="settings-panel">
+      <div class="settings-header">Privacy Firewall (Allowed PII)</div>
+      <div class="settings-grid">
+        <label><input type="checkbox" class="pii-toggle" data-pii-type="email"> Email</label>
+        <label><input type="checkbox" class="pii-toggle" data-pii-type="phone"> Phone</label>
+        <label><input type="checkbox" class="pii-toggle" data-pii-type="ssn"> SSN</label>
+        <label><input type="checkbox" class="pii-toggle" data-pii-type="credit_card"> Credit Card</label>
+        <label><input type="checkbox" class="pii-toggle" data-pii-type="aadhaar"> Aadhaar</label>
+        <label><input type="checkbox" class="pii-toggle" data-pii-type="pan_card"> PAN</label>
+      </div>
+    </div>
+
     <!-- DOM JSON Display Area -->
     <main class="json-container">
       <pre id="json-output">Loading DOM structure...</pre>

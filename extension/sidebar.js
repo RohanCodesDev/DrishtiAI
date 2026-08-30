@@ -116,8 +116,30 @@
     });
   }
 
+  // Initialize PII Settings
+  async function initPiiSettings() {
+    const toggles = document.querySelectorAll('.pii-toggle');
+    const { piiConfig } = await chrome.storage.local.get('piiConfig');
+    const config = piiConfig || {};
+
+    toggles.forEach(toggle => {
+      const type = toggle.dataset.piiType;
+      toggle.checked = config[type] === true;
+
+      toggle.addEventListener('change', async () => {
+        const newConfig = {};
+        toggles.forEach(t => {
+          newConfig[t.dataset.piiType] = t.checked;
+        });
+        await chrome.storage.local.set({ piiConfig: newConfig });
+        loadBoundTabDOM();
+      });
+    });
+  }
+
   // Automatically fetch DOM on load
   document.addEventListener('DOMContentLoaded', () => {
+    initPiiSettings();
     loadBoundTabDOM();
   });
 })();
