@@ -2,7 +2,7 @@
 
 *This document is a living file. It tracks the current capabilities of our project, explains the purpose of each file, and outlines our immediate next steps.*
 
-## Current Status: 🟢 Phase 4 Completed / Ready for Phase 5
+## Current Status: 🟢 Phase 5 Completed / Ready for Phase 6
 
 ### What We Can Do Now (Current Capabilities)
 * Load a custom, local extension into Google Chrome.
@@ -10,7 +10,8 @@
 * Click a button to inject a content script into the active webpage.
 * Analyze the DOM (Document Object Model) of the current webpage.
 * Extract specific interactive elements (`h1`, `a`, `button`, `input`), including their exact on-screen coordinates and text.
-* Display this structured data as a JSON object directly within the popup interface.
+* Locally detect Personally Identifiable Information (PII) like emails and phone numbers within the extracted text using Regular Expressions.
+* Display this structured data as a JSON object directly within the popup interface, explicitly flagging elements that contain PII.
 
 ### File Directory & Purpose
 
@@ -29,6 +30,6 @@
 * `extension/content.js` 
   * The script injected directly into the user's active webpage. It reads the page's HTML (DOM), extracts coordinates/text for interactive elements, and sends it back to `popup.js`.
 
-### What We Will Do Next (Phase 5)
-Our next major goal is **PII / Sensitive Information Detection**. 
-Instead of just grabbing elements, we will teach `content.js` to look at the text and identify potentially sensitive information (like emails or phone numbers) using deterministic methods (like Regular Expressions). This is the crucial first step toward our Privacy Firewall!
+### What We Will Do Next (Phase 6)
+Our next major goal is the **Privacy Firewall & Redaction**. 
+Now that `content.js` can successfully detect PII, we need to implement logic to mask or redact this information (e.g., changing `john@email.com` to `[EMAIL_REDACTED]`) before the structured data is ever finalized or sent anywhere. This ensures sensitive data never leaves the local environment.
