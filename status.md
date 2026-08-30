@@ -2,7 +2,7 @@
 
 *This document is a living file. It tracks the current capabilities of our project, explains the purpose of each file, and outlines our immediate next steps.*
 
-## Current Status: 🟢 Phase 5 Completed / Sidebar Architecture Ready for Phase 6
+## Current Status: 🟢 Phase 6 Completed / Ready for Phase 7
 
 ### What We Can Do Now (Current Capabilities)
 * Load a custom, local Manifest V3 extension into Google Chrome.
@@ -13,7 +13,8 @@
 * Request and extract a clean, AI-friendly nested DOM hierarchy (preserving parent-child container relationships, interactive flags, coordinates, and semantic attributes while safeguarding sensitive fields like passwords).
 * View the page's hierarchical DOM structure via an interactive collapsible Tree Explorer or raw formatted JSON.
 * Support a conversation stream with user instructions, assistant responses, and agent status/activity lifecycle cards.
-* Locally detect Personally Identifiable Information (PII) like emails and phone numbers within the extracted text using Regular Expressions.
+* Locally detect Personally Identifiable Information (PII) like emails and phone numbers within the extracted text and attributes using Regular Expressions.
+* Redact sensitive information locally (e.g., swapping emails for `[EMAIL_REDACTED]`) before the data is finalized, acting as a true Privacy Firewall.
 * Explicitly flag elements that contain PII in the structured JSON representation.
 
 ### File Directory & Purpose
@@ -35,6 +36,6 @@
 * `extension/sidebar.js` 
   * The controller for the sidebar interface. Listens to tab lifecycle events (`onActivated`, `onUpdated`), sends `GET_DOM` requests to the service worker, safely renders messages, and builds the recursive DOM tree view.
 
-### What We Will Do Next (Phase 6)
-Our next major goal is the **Privacy Firewall & Redaction**. 
-Now that `content.js` can successfully detect PII, we need to implement logic to mask or redact this information (e.g., changing `john@email.com` to `[EMAIL_REDACTED]`) before the structured data is ever finalized or sent anywhere. This ensures sensitive data never leaves the local environment.
+### What We Will Do Next (Phase 7)
+Our next major goal is the **Backend Server**. 
+With our local Privacy Firewall working, we are finally ready to start sending the *sanitized* data somewhere to be processed! We will set up a local Node.js/Express backend API to receive this JSON payload from our browser extension.

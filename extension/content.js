@@ -1,22 +1,27 @@
 // This file is injected into the webpage the user is viewing.
 
-// Helper function to detect PII using Regular Expressions
-function detectPII(text) {
+// Helper function to detect and redact PII using Regular Expressions
+function processPII(text) {
+  if (typeof text !== 'string') return { redactedText: text, piiTypes: [] };
+  
+  let redactedText = text;
   const piiTypes = [];
   
-  // Basic Email Regex
-  const emailRegex = /\b[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Z|a-z]{2,}\b/;
-  if (emailRegex.test(text)) {
+  // Basic Email Regex (with global flag)
+  const emailRegex = /\b[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Z|a-z]{2,}\b/g;
+  if (emailRegex.test(redactedText)) {
     piiTypes.push('email');
+    redactedText = redactedText.replace(emailRegex, '[EMAIL_REDACTED]');
   }
 
-  // Basic Phone Regex (matches formats like 555-123-4567, 555.123.4567, 555 123 4567)
-  const phoneRegex = /\b\d{3}[-.\s]?\d{3}[-.\s]?\d{4}\b/;
-  if (phoneRegex.test(text)) {
+  // Basic Phone Regex (with global flag)
+  const phoneRegex = /\b\d{3}[-.\s]?\d{3}[-.\s]?\d{4}\b/g;
+  if (phoneRegex.test(redactedText)) {
     piiTypes.push('phone');
+    redactedText = redactedText.replace(phoneRegex, '[PHONE_REDACTED]');
   }
 
-  return piiTypes;
+  return { redactedText, piiTypes };
 }
 
 function getStructuredDOM() {
@@ -268,18 +273,36 @@ function getStructuredDOM() {
       nodeObj.role = role;
     }
 
+    let nodeHasPII = false;
+    const nodePIITypes = new Set();
+
     if (hasText) {
-      nodeObj.text = directText;
+      const { redactedText, piiTypes } = processPII(directText);
+      nodeObj.text = redactedText;
       
-      const detectedPII = detectPII(directText);
-      if (detectedPII.length > 0) {
-        nodeObj.has_pii = true;
-        nodeObj.pii_types = detectedPII;
+      if (piiTypes.length > 0) {
+        nodeHasPII = true;
+        piiTypes.forEach(type => nodePIITypes.add(type));
       }
     }
 
     if (hasAttributes) {
+      for (const [key, val] of Object.entries(attributes)) {
+        if (typeof val === 'string') {
+          const { redactedText, piiTypes } = processPII(val);
+          if (piiTypes.length > 0) {
+            attributes[key] = redactedText;
+            nodeHasPII = true;
+            piiTypes.forEach(type => nodePIITypes.add(type));
+          }
+        }
+      }
       nodeObj.attributes = attributes;
+    }
+
+    if (nodeHasPII) {
+      nodeObj.has_pii = true;
+      nodeObj.pii_types = Array.from(nodePIITypes);
     }
 
     if (interactive) {

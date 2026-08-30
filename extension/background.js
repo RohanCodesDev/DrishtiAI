@@ -1,30 +1,10 @@
 // DrishtiAI Background Service Worker
 // Manages tab-specific side panel behavior and message routing.
 
-// Disable the side panel globally by default so it does NOT appear on all tabs
+// Automatically open the side panel when the user clicks the extension icon
 chrome.sidePanel
-  .setOptions({ enabled: false })
-  .catch((err) => console.error('DrishtiAI: Failed to disable global side panel:', err));
-
-// When the user clicks the extension action icon on a specific tab:
-// Enable and open the side panel EXCLUSIVELY for that specific tab.
-chrome.action.onClicked.addListener(async (tab) => {
-  if (!tab || !tab.id) return;
-
-  try {
-    // Enable and set path specifically for this tab
-    await chrome.sidePanel.setOptions({
-      tabId: tab.id,
-      path: `sidebar.html?tabId=${tab.id}`,
-      enabled: true
-    });
-
-    // Open side panel specifically for this tab
-    await chrome.sidePanel.open({ tabId: tab.id });
-  } catch (err) {
-    console.error('DrishtiAI: Failed to open tab-specific side panel:', err);
-  }
-});
+  .setPanelBehavior({ openPanelOnActionClick: true })
+  .catch((err) => console.error('DrishtiAI: Failed to set panel behavior:', err));
 
 // Helper: Check if a URL is restricted from content script execution
 function isRestrictedUrl(url) {

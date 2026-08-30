@@ -84,7 +84,7 @@ As this is a learning journey from absolute beginner to industry-level, the foll
 ### Local Perception & Privacy (Current Focus)
 * [x] **Phase 4:** DOM / Page Understanding (Structured extraction of elements).
 * [x] **Phase 5:** PII / Sensitive Information Detection (Finding emails, passwords, phones).
-* [ ] **Phase 6:** Privacy Firewall & Redaction (Masking PII before it can leave the extension).
+* [x] **Phase 6:** Privacy Firewall & Redaction (Masking PII before it can leave the extension).
 
 ### Backend & Intelligence
 * [ ] **Phase 7:** Backend Server (Express API integration).
@@ -105,9 +105,10 @@ As this is a learning journey from absolute beginner to industry-level, the foll
 
 ## 6. Current Status 
 
-We have successfully completed up through **Phase 5**.
+We have successfully completed up through **Phase 6**.
 * The Git repository is initialized.
 * The folder structure is established.
-* A working Manifest V3 extension exists in `extension/`, complete with a popup UI and a content script that successfully counts basic DOM elements and flags PII (emails/phones).
+* A working Manifest V3 extension exists in `extension/`, featuring a persistent side panel and a complex DOM extraction script.
+* A local **Privacy Firewall** is actively running, which detects and physically redacts PII (emails/phones) from both element text and attributes before finalizing the JSON.
 
-**Next step:** Initiate **Phase 6** when ready.
+**Next step:** Initiate **Phase 7** when ready.
