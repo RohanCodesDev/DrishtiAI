@@ -82,7 +82,7 @@ As this is a learning journey from absolute beginner to industry-level, the foll
 * [x] **Phase 3:** First Working Chrome Extension (Basic DOM reading popup).
 
 ### Local Perception & Privacy (Current Focus)
-* [ ] **Phase 4:** DOM / Page Understanding (Structured extraction of elements).
+* [x] **Phase 4:** DOM / Page Understanding (Structured extraction of elements).
 * [ ] **Phase 5:** PII / Sensitive Information Detection (Finding emails, passwords, phones).
 * [ ] **Phase 6:** Privacy Firewall & Redaction (Masking PII before it can leave the extension).
 
