@@ -1,0 +1,14 @@
+{
+  "manifest_version": 3,
+  "name": "DRISHTI",
+  "version": "1.0",
+  "description": "Privacy-first Browser Agent",
+  "action": {
+    "default_popup": "popup.html",
+    "default_title": "Open DRISHTI"
+  },
+  "permissions": [
+    "activeTab",
+    "scripting"
+  ]
+}
