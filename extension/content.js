@@ -21,6 +21,20 @@ function processPII(text) {
     redactedText = redactedText.replace(phoneRegex, '[PHONE_REDACTED]');
   }
 
+  // Social Security Number Regex (with global flag)
+  const ssnRegex = /\b\d{3}[-.\s]?\d{2}[-.\s]?\d{4}\b/g;
+  if (ssnRegex.test(redactedText)) {
+    piiTypes.push('ssn');
+    redactedText = redactedText.replace(ssnRegex, '[SSN_REDACTED]');
+  }
+
+  // Credit Card Regex (Basic 13-16 digits with global flag)
+  const ccRegex = /\b(?:\d[ -]*?){13,16}\b/g;
+  if (ccRegex.test(redactedText)) {
+    piiTypes.push('credit_card');
+    redactedText = redactedText.replace(ccRegex, '[CREDIT_CARD_REDACTED]');
+  }
+
   return { redactedText, piiTypes };
 }
 
