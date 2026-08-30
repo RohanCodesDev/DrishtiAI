@@ -35,6 +35,20 @@ function processPII(text) {
     redactedText = redactedText.replace(ccRegex, '[CREDIT_CARD_REDACTED]');
   }
 
+  // Aadhaar Card Regex (India - 12 digits)
+  const aadhaarRegex = /\b\d{4}[ -]?\d{4}[ -]?\d{4}\b/g;
+  if (aadhaarRegex.test(redactedText)) {
+    piiTypes.push('aadhaar');
+    redactedText = redactedText.replace(aadhaarRegex, '[AADHAAR_REDACTED]');
+  }
+
+  // PAN Card Regex (India - 5 letters, 4 numbers, 1 letter)
+  const panRegex = /\b[A-Z]{5}\d{4}[A-Z]{1}\b/gi;
+  if (panRegex.test(redactedText)) {
+    piiTypes.push('pan_card');
+    redactedText = redactedText.replace(panRegex, '[PAN_REDACTED]');
+  }
+
   return { redactedText, piiTypes };
 }
 
