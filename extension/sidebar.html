@@ -1,0 +1,38 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>DrishtiAI — DOM JSON</title>
+  <link rel="stylesheet" href="sidebar.css">
+</head>
+<body>
+  <div class="sidebar-container">
+    
+    <!-- Minimal Header -->
+    <header class="header">
+      <div class="brand">
+        <span class="brand-title">DrishtiAI</span>
+        <span id="element-count-badge" class="count-badge">Extracting...</span>
+      </div>
+      <div class="actions">
+        <button id="copy-btn" class="btn" title="Copy JSON">Copy</button>
+        <button id="refresh-btn" class="btn" title="Refresh DOM">Refresh</button>
+      </div>
+    </header>
+
+    <!-- Page Context Bar -->
+    <div class="context-bar">
+      <span class="page-title" id="page-title">Detecting page...</span>
+    </div>
+
+    <!-- DOM JSON Display Area -->
+    <main class="json-container">
+      <pre id="json-output">Loading DOM structure...</pre>
+    </main>
+
+  </div>
+
+  <script src="sidebar.js"></script>
+</body>
+</html>

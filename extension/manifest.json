@@ -1,14 +1,23 @@
 {
   "manifest_version": 3,
-  "name": "DRISHTI",
+  "name": "DrishtiAI",
   "version": "1.0",
   "description": "Privacy-first Browser Agent",
   "action": {
-    "default_popup": "popup.html",
-    "default_title": "Open DRISHTI"
+    "default_title": "Open DrishtiAI Sidebar"
+  },
+  "background": {
+    "service_worker": "background.js"
+  },
+  "side_panel": {
+    "default_path": "sidebar.html"
   },
   "permissions": [
-    "activeTab",
+    "sidePanel",
+    "tabs",
     "scripting"
+  ],
+  "host_permissions": [
+    "<all_urls>"
   ]
 }
