@@ -1,5 +1,7 @@
 const express = require('express');
 const cors = require('cors');
+const Groq = require('groq-sdk');
+const { AGENT_SYSTEM_PROMPT, buildUserPrompt } = require('./prompts');
 require('dotenv').config();
 
 const app = express();
@@ -32,21 +34,44 @@ app.post('/api/analyze', async (req, res) => {
     console.log(`Elements: ${sanitizedData.element_count}`);
     console.log(`Firewall Active Rules: ${sanitizedData.firewall_active_rules}`);
     
-    // In Phase 8, we will send this sanitizedData to an LLM/VLM.
-    // For now, we just mock the AI response.
-    
-    setTimeout(() => {
-      // Mocked AI Structured Action
-      const mockAction = {
-        action: 'WAIT',
-        target_id: null,
-        reason: 'Page context received successfully and sanitized locally. Awaiting further instructions.',
-        context_summary: `Processed ${sanitizedData.element_count} elements safely.`
-      };
+    // Initialize Groq SDK (requires process.env.GROQ_API_KEY)
+    if (!process.env.GROQ_API_KEY) {
+      return res.status(500).json({ error: 'GROQ_API_KEY is missing from backend/.env' });
+    }
 
-      console.log('--- Responding with Mock Action ---', mockAction);
-      res.json({ success: true, ai_response: mockAction });
-    }, 1500); // Simulate network/LLM latency
+    const groq = new Groq({ apiKey: process.env.GROQ_API_KEY });
+    
+    console.log('--- Querying Groq... ---');
+    console.log(`User Task: ${sanitizedData.userTask || 'None'}`);
+    const userPrompt = buildUserPrompt(sanitizedData, sanitizedData.userTask);
+
+    const chatCompletion = await groq.chat.completions.create({
+      messages: [
+        {
+          role: 'system',
+          content: AGENT_SYSTEM_PROMPT
+        },
+        {
+          role: 'user',
+          content: userPrompt
+        }
+      ],
+      model: 'qwen/qwen3.8-27b',
+      response_format: { type: 'json_object' }
+    });
+
+    const responseText = chatCompletion.choices[0]?.message?.content || '{}';
+
+    let aiAction = {};
+    try {
+      aiAction = JSON.parse(responseText);
+    } catch (parseErr) {
+      console.error('Failed to parse Groq JSON output:', responseText);
+      aiAction = { action: 'WAIT', reason: 'Failed to parse AI output', raw: responseText };
+    }
+
+    console.log('--- Responding with Action ---', aiAction);
+    res.json({ success: true, ai_response: aiAction });
 
   } catch (error) {
     console.error('Error during analysis:', error);

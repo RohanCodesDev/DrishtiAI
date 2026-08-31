@@ -37,6 +37,10 @@
   const blacklistTags = document.getElementById('blacklist-tags');
   const whitelistForm = document.getElementById('whitelist-form');
   const whitelistInput = document.getElementById('whitelist-input');
+  
+  const runAgentBtn = document.getElementById('run-agent-btn');
+  const taskInput = document.getElementById('task-input');
+  const autoLoopCb = document.getElementById('auto-loop-cb');
   const whitelistTags = document.getElementById('whitelist-tags');
 
   // Default Firewall Configuration
@@ -498,6 +502,99 @@
           analyzeBtn.disabled = false;
         }
       });
+    }
+
+    if (runAgentBtn && taskInput) {
+      async function executeAgentStep(loopCount = 1) {
+        if (loopCount > 10) {
+          if (aiResponseText) aiResponseText.innerHTML += '<br/><strong>Loop Limit Reached (10).</strong>';
+          runAgentBtn.textContent = 'Run Agent';
+          runAgentBtn.disabled = false;
+          return;
+        }
+
+        if (!currentJsonText) return;
+        
+        const userTask = taskInput.value.trim();
+        if (!userTask) {
+          alert('Please enter an objective for the agent.');
+          return;
+        }
+
+        runAgentBtn.textContent = `Running (Loop ${loopCount})...`;
+        runAgentBtn.disabled = true;
+        
+        if (aiResponseBanner) aiResponseBanner.style.display = 'flex';
+        if (aiResponseText) {
+          if (loopCount === 1) aiResponseText.textContent = 'Transmitting to backend...';
+        }
+
+        try {
+          const payload = JSON.parse(currentJsonText);
+          payload.userTask = userTask;
+          
+          const response = await fetch('http://localhost:3000/api/analyze', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(payload)
+          });
+
+          const result = await response.json();
+          let isDone = false;
+          
+          if (result.success && result.ai_response) {
+            const ai = result.ai_response;
+            if (aiResponseText) {
+              let html = `<strong>[Loop ${loopCount}] Action:</strong> ${ai.action}`;
+              if (ai.target_id) html += `<br/> <strong>Target:</strong> ${ai.target_id}`;
+              if (ai.value) html += `<br/> <strong>Value:</strong> ${ai.value}`;
+              html += `<br/> <strong>Reason:</strong> ${ai.reason}`;
+              aiResponseText.innerHTML = html;
+            }
+            
+            if (ai.action === 'DONE') {
+              isDone = true;
+            } else if (ai.action && ai.action !== 'WAIT') {
+              // Forward action to background to execute in content script
+              chrome.runtime.sendMessage({
+                type: 'EXECUTE_ACTION',
+                tabId: boundTabId,
+                action: ai
+              });
+            }
+          } else {
+            if (aiResponseText) aiResponseText.textContent = `Error: ${result.error || 'Unknown error'}`;
+            isDone = true; // Stop loop on error
+          }
+
+          // Handle Auto-Looping
+          if (!isDone && autoLoopCb && autoLoopCb.checked) {
+            if (aiResponseText) aiResponseText.innerHTML += '<br/><em>Waiting for DOM update...</em>';
+            
+            // Wait 1.5s for page to reflect action
+            setTimeout(() => {
+              // Re-fetch DOM
+              loadBoundTabDOM();
+              // Wait 500ms for DOM fetch to finish, then recurse
+              setTimeout(() => {
+                executeAgentStep(loopCount + 1);
+              }, 500);
+            }, 1500);
+          } else {
+            // Finish
+            runAgentBtn.textContent = 'Run Agent';
+            runAgentBtn.disabled = false;
+          }
+
+        } catch (err) {
+          console.error('Analysis failed:', err);
+          if (aiResponseText) aiResponseText.textContent = 'Connection failed. Is the backend server running?';
+          runAgentBtn.textContent = 'Run Agent';
+          runAgentBtn.disabled = false;
+        }
+      }
+
+      runAgentBtn.addEventListener('click', () => executeAgentStep(1));
     }
 
     // Listen for tab switching and navigation events

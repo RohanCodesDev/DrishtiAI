@@ -560,7 +560,8 @@ function buildTree(el, config) {
   }
 
   const nodeObj = {
-    tag: tagLower
+    tag: tagLower,
+    __el: el
   };
 
   if (role) {
@@ -619,6 +620,12 @@ function assignIds(rawTree) {
   function walk(node) {
     if (!node) return null;
     const id = `element_${elementCount++}`;
+    
+    // Tag the actual DOM element so the agent can interact with it later
+    if (node.__el) {
+      node.__el.dataset.drishtiId = id;
+    }
+
     const ordered = {
       id: id,
       tag: node.tag
@@ -689,6 +696,43 @@ if (typeof chrome !== 'undefined' && chrome.runtime && chrome.runtime.onMessage)
 
     if (message && message.type === 'PING') {
       sendResponse({ success: true, status: 'ready', version: 2 });
+      return true;
+    }
+
+    if (message && message.type === 'EXECUTE_ACTION') {
+      const ai = message.action;
+      console.log('DrishtiAI executing action:', ai);
+      
+      let targetElement = null;
+      if (ai.target_id) {
+        targetElement = document.querySelector(`[data-drishti-id="${ai.target_id}"]`);
+      }
+
+      if (!targetElement && ai.action !== 'DONE' && ai.action !== 'WAIT') {
+        sendResponse({ success: false, error: 'Target element not found' });
+        return true;
+      }
+
+      try {
+        switch (ai.action) {
+          case 'CLICK':
+            targetElement.focus();
+            targetElement.click();
+            break;
+          case 'TYPE':
+            targetElement.focus();
+            targetElement.value = ai.value || '';
+            targetElement.dispatchEvent(new Event('input', { bubbles: true }));
+            targetElement.dispatchEvent(new Event('change', { bubbles: true }));
+            break;
+          case 'NAVIGATE':
+            if (ai.value) window.location.href = ai.value;
+            break;
+        }
+        sendResponse({ success: true });
+      } catch (e) {
+        sendResponse({ success: false, error: e.message });
+      }
       return true;
     }
   });

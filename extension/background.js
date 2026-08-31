@@ -207,4 +207,21 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
     })();
     return true;
   }
+
+  if (message && message.type === 'EXECUTE_ACTION') {
+    (async () => {
+      let tabId = message.tabId;
+      if (!tabId) {
+        const [activeTab] = await chrome.tabs.query({ active: true, currentWindow: true });
+        tabId = activeTab?.id;
+      }
+      if (tabId) {
+        chrome.tabs.sendMessage(tabId, message, (res) => {
+          if (chrome.runtime.lastError) console.error('EXECUTE_ACTION error:', chrome.runtime.lastError.message);
+          if (sendResponse) sendResponse(res);
+        });
+      }
+    })();
+    return true;
+  }
 });
