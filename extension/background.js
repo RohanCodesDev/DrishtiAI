@@ -1,10 +1,47 @@
+// Setup Offscreen Document (for future Phase 10 Vision)
+const OFFSCREEN_DOCUMENT_PATH = 'offscreen.html';
+
+async function setupOffscreenDocument() {
+  // Firefox doesn't support chrome.offscreen, but Chrome MV3 requires it for DOM/Canvas.
+  if (typeof chrome !== 'undefined' && chrome.offscreen) {
+    try {
+      const existingContexts = await chrome.runtime.getContexts({
+        contextTypes: ['OFFSCREEN_DOCUMENT'],
+        documentUrls: [chrome.runtime.getURL(OFFSCREEN_DOCUMENT_PATH)]
+      });
+      
+      if (existingContexts.length > 0) {
+        return; // Already exists
+      }
+      
+      await chrome.offscreen.createDocument({
+        url: OFFSCREEN_DOCUMENT_PATH,
+        reasons: ['DOM_PARSER', 'WORKERS'], 
+        justification: 'Required for future local vision processing and canvas rendering.'
+      });
+    } catch (err) {
+      console.error('Failed to create offscreen document:', err);
+    }
+  }
+}
+
+// Initialize offscreen doc
+setupOffscreenDocument();
+
+
 // DrishtiAI Background Service Worker
 // Manages tab-specific side panel behavior and message routing.
 
 // Automatically open the side panel when the user clicks the extension icon
-chrome.sidePanel
-  .setPanelBehavior({ openPanelOnActionClick: true })
-  .catch((err) => console.error('DrishtiAI: Failed to set panel behavior:', err));
+if (typeof chrome !== 'undefined' && chrome.sidePanel) {
+  chrome.sidePanel
+    .setPanelBehavior({ openPanelOnActionClick: true })
+    .catch((err) => console.error('DrishtiAI: Failed to set panel behavior:', err));
+} else if (typeof chrome !== 'undefined' && chrome.sidePanel) {
+  chrome.sidePanel
+    .setPanelBehavior({ openPanelOnActionClick: true })
+    .catch((err) => console.error('DrishtiAI: Failed to set panel behavior:', err));
+}
 
 // Helper: Check if a URL is restricted from content script execution
 function isRestrictedUrl(url) {
@@ -17,7 +54,8 @@ function isRestrictedUrl(url) {
     'devtools://',
     'view-source:',
     'https://chromewebstore.google.com',
-    'https://chrome.google.com/webstore'
+    'https://chrome.google.com/webstore',
+    'moz-extension://'
   ];
   return restrictedPrefixes.some((prefix) => url.startsWith(prefix));
 }
@@ -52,9 +90,20 @@ async function getTabDOM(targetTabId, config = null) {
 
   // Attempt 1: Try sending message to active content script v2 in target tab
   try {
-    const pingRes = await chrome.tabs.sendMessage(tabId, { type: 'PING' }).catch(() => null);
+    const pingRes = await new Promise(resolve => {
+      chrome.tabs.sendMessage(tabId, { type: 'PING' }, (res) => {
+        if (chrome.runtime.lastError) resolve(null);
+        else resolve(res);
+      });
+    });
+
     if (pingRes && pingRes.version === 2) {
-      const response = await chrome.tabs.sendMessage(tabId, { type: 'GET_DOM', config });
+      const response = await new Promise(resolve => {
+        chrome.tabs.sendMessage(tabId, { type: 'GET_DOM', config }, (res) => {
+          if (chrome.runtime.lastError) resolve(null);
+          else resolve(res);
+        });
+      });
       if (response && response.success && response.data) {
         return response.data;
       }
@@ -121,11 +170,21 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
 
         if (tabId) {
           try {
-            const pingRes = await chrome.tabs.sendMessage(tabId, { type: 'PING' }).catch(() => null);
+            const pingRes = await new Promise(resolve => {
+              chrome.tabs.sendMessage(tabId, { type: 'PING' }, (res) => {
+                if (chrome.runtime.lastError) resolve(null);
+                else resolve(res);
+              });
+            });
             if (pingRes && pingRes.version === 2) {
-              const response = await chrome.tabs.sendMessage(tabId, {
-                type: 'FIREWALL_CONFIG_UPDATED',
-                config: message.config
+              const response = await new Promise(resolve => {
+                chrome.tabs.sendMessage(tabId, {
+                  type: 'FIREWALL_CONFIG_UPDATED',
+                  config: message.config
+                }, (res) => {
+                  if (chrome.runtime.lastError) resolve(null);
+                  else resolve(res);
+                });
               });
               if (response && response.success && response.data) {
                 sendResponse({ success: true, data: response.data });

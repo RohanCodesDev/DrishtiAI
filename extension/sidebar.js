@@ -10,6 +10,11 @@
   const pageTitle = document.getElementById('page-title');
   const copyBtn = document.getElementById('copy-btn');
   const refreshBtn = document.getElementById('refresh-btn');
+  const analyzeBtn = document.getElementById('analyze-btn');
+  const aiResponseBanner = document.getElementById('ai-response-banner');
+  const aiResponseText = document.getElementById('ai-response-text');
+  const debugErrorBanner = document.getElementById('debug-error-banner');
+  const debugErrorText = document.getElementById('debug-error-text');
 
   // Firewall & Settings Elements
   const settingsToggleBtn = document.getElementById('settings-toggle-btn');
@@ -286,24 +291,58 @@
 
       pageTitle.textContent = tab.title ? `${tab.title} (${tab.url})` : (tab.url || `Tab #${tabId}`);
 
-      const response = await chrome.runtime.sendMessage({
-        type: 'GET_DOM',
-        tabId: tabId,
-        config: currentConfig
+      let caughtLastError = null;
+      let resType = 'unknown';
+      let isResNull = false;
+      let isResUndefined = false;
+
+      const response = await new Promise((resolve) => {
+        chrome.runtime.sendMessage({
+          type: 'GET_DOM',
+          tabId: tabId,
+          config: currentConfig
+        }, (res) => {
+          resType = typeof res;
+          isResNull = res === null;
+          isResUndefined = res === undefined;
+
+          if (chrome.runtime.lastError) {
+            caughtLastError = chrome.runtime.lastError.message || JSON.stringify(chrome.runtime.lastError);
+            console.error("Native Messaging Error:", chrome.runtime.lastError);
+            resolve(res); // resolve with res anyway so we can see what it is
+          } else {
+            resolve(res);
+          }
+        });
       });
+
+      if (debugErrorBanner) {
+        debugErrorBanner.style.display = 'none';
+        debugErrorText.textContent = '';
+      }
 
       if (response && response.success && response.data) {
         renderDOMResult(response.data);
       } else {
+        if (debugErrorBanner) {
+          debugErrorBanner.style.display = 'block';
+          debugErrorText.textContent = `Type: ${resType} | isNull: ${isResNull} | isUndefined: ${isResUndefined}\nRaw Response: ${JSON.stringify(response, null, 2)}\n\nCaptured Last Error: ${caughtLastError || 'None'}`;
+        }
+        
         const errObj = {
           error: response?.error || 'EXTRACTION_FAILED',
-          message: response?.message || 'Failed to extract DOM from this tab.'
+          message: response?.message || 'Failed to extract DOM from this tab.',
+          raw_response: response || null
         };
         countBadge.textContent = 'Unavailable';
         currentJsonText = JSON.stringify(errObj, null, 2);
         jsonOutput.textContent = currentJsonText;
       }
     } catch (err) {
+      if (debugErrorBanner) {
+        debugErrorBanner.style.display = 'block';
+        debugErrorText.textContent = `Exception: ${err.message}\nStack: ${err.stack}\nChrome Last Error: ${chrome.runtime.lastError ? chrome.runtime.lastError.message : 'None'}`;
+      }
       console.error('DrishtiAI: loadBoundTabDOM error:', err);
       countBadge.textContent = 'Error';
       currentJsonText = JSON.stringify({ error: 'COMMUNICATION_ERROR', message: err.message }, null, 2);
@@ -418,6 +457,48 @@
     refreshBtn.addEventListener('click', () => {
       loadBoundTabDOM();
     });
+
+    // Analyze with AI button
+    if (analyzeBtn) {
+      analyzeBtn.addEventListener('click', async () => {
+        if (!currentJsonText) return;
+        
+        const originalText = analyzeBtn.textContent;
+        analyzeBtn.textContent = 'Sending...';
+        analyzeBtn.disabled = true;
+        
+        if (aiResponseBanner) aiResponseBanner.style.display = 'flex';
+        if (aiResponseText) aiResponseText.textContent = 'Transmitting sanitized DOM to local backend...';
+
+        try {
+          const payload = JSON.parse(currentJsonText);
+          
+          const response = await fetch('http://localhost:3000/api/analyze', {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json'
+            },
+            body: JSON.stringify(payload)
+          });
+
+          const result = await response.json();
+          
+          if (result.success && result.ai_response) {
+            if (aiResponseText) {
+              aiResponseText.innerHTML = `<strong>Action:</strong> ${result.ai_response.action} <br/> <strong>Reason:</strong> ${result.ai_response.reason}`;
+            }
+          } else {
+            if (aiResponseText) aiResponseText.textContent = `Error: ${result.error || 'Unknown error'}`;
+          }
+        } catch (err) {
+          console.error('Analysis failed:', err);
+          if (aiResponseText) aiResponseText.textContent = 'Connection failed. Is the backend server running?';
+        } finally {
+          analyzeBtn.textContent = originalText;
+          analyzeBtn.disabled = false;
+        }
+      });
+    }
 
     // Listen for tab switching and navigation events
     if (typeof chrome !== 'undefined' && chrome.tabs) {

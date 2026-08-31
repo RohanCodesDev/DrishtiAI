@@ -16,6 +16,7 @@
         <span id="element-count-badge" class="count-badge">Extracting...</span>
       </div>
       <div class="actions">
+        <button id="analyze-btn" class="btn btn-primary" title="Send to AI for analysis">Analyze</button>
         <button id="copy-btn" class="btn" title="Copy JSON">Copy</button>
         <button id="refresh-btn" class="btn" title="Refresh DOM">Refresh</button>
         <button id="settings-toggle-btn" class="btn btn-settings" title="Privacy Firewall Settings">
@@ -28,6 +29,18 @@
     <!-- Page Context Bar -->
     <div class="context-bar">
       <span class="page-title" id="page-title">Detecting page...</span>
+    </div>
+
+    <!-- Debug Error Banner -->
+    <div id="debug-error-banner" style="display: none; background: #5c1818; color: #ff8e8e; font-size: 11px; padding: 10px; margin: 10px; border-radius: 4px; font-family: monospace; word-break: break-all;">
+      <strong>Debug Error Info:</strong><br/>
+      <span id="debug-error-text"></span>
+    </div>
+
+    <!-- AI Response Banner -->
+    <div id="ai-response-banner" class="ai-response-banner" style="display: none;">
+      <div class="ai-header">🤖 AI Agent Response:</div>
+      <div id="ai-response-text" class="ai-text">Thinking...</div>
     </div>
 
     <!-- Active Firewall Summary Pill -->
