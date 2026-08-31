@@ -665,8 +665,8 @@ async function getStructuredDOM(overrideConfig = null) {
   };
 }
 
-// Listen for messages from background service worker and sidebar
-if (typeof chrome !== 'undefined' && chrome.runtime && chrome.runtime.onMessage) {
+// Listen for messages from background service worker and sidebar (Only if NOT in offscreen doc)
+if (typeof chrome !== 'undefined' && chrome.runtime && chrome.runtime.onMessage && !window.location.href.includes('offscreen.html')) {
   chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
     if (message && (message.type === 'GET_DOM' || message.type === 'GET_PAGE_CONTEXT')) {
       (async () => {
@@ -708,12 +708,14 @@ if (typeof chrome !== 'undefined' && chrome.runtime && chrome.runtime.onMessage)
         targetElement = document.querySelector(`[data-drishti-id="${ai.target_id}"]`);
       }
 
-      if (!targetElement && ai.action !== 'DONE' && ai.action !== 'WAIT') {
+      if (!targetElement && ai.action !== 'DONE' && ai.action !== 'WAIT' && ai.action !== 'SCROLL') {
         sendResponse({ success: false, error: 'Target element not found' });
         return true;
       }
 
       try {
+        if (targetElement) highlightElement(targetElement, ai.action);
+
         switch (ai.action) {
           case 'CLICK':
             targetElement.focus();
@@ -727,6 +729,13 @@ if (typeof chrome !== 'undefined' && chrome.runtime && chrome.runtime.onMessage)
             break;
           case 'NAVIGATE':
             if (ai.value) window.location.href = ai.value;
+            break;
+          case 'SCROLL':
+            if (targetElement) {
+              targetElement.scrollIntoView({ behavior: 'instant', block: 'center' });
+            } else {
+              window.scrollBy({ top: ai.value === 'up' ? -800 : 800, behavior: 'instant' });
+            }
             break;
         }
         sendResponse({ success: true });
@@ -751,5 +760,50 @@ if (typeof window !== 'undefined') {
 // Return the structured DOM when evaluated directly via executeScript
 if (typeof document !== 'undefined') {
   getStructuredDOM();
+}
+
+// Visual Highlighting for Agent Actions
+function highlightElement(el, actionType) {
+  if (!el) return;
+  
+  const rect = el.getBoundingClientRect();
+  const overlay = document.createElement('div');
+  overlay.style.position = 'fixed';
+  overlay.style.top = `${rect.top}px`;
+  overlay.style.left = `${rect.left}px`;
+  overlay.style.width = `${rect.width}px`;
+  overlay.style.height = `${rect.height}px`;
+  overlay.style.border = '3px solid #22c55e'; // Green
+  overlay.style.backgroundColor = 'rgba(34, 197, 94, 0.2)';
+  overlay.style.borderRadius = getComputedStyle(el).borderRadius || '4px';
+  overlay.style.boxShadow = '0 0 15px rgba(34, 197, 94, 0.6)';
+  overlay.style.pointerEvents = 'none';
+  overlay.style.zIndex = '999999';
+  overlay.style.transition = 'all 0.5s ease-out';
+  
+  const label = document.createElement('div');
+  label.textContent = `🤖 Agent: ${actionType}`;
+  label.style.position = 'absolute';
+  label.style.top = '-25px';
+  label.style.right = '0';
+  label.style.background = '#22c55e';
+  label.style.color = '#fff';
+  label.style.fontSize = '12px';
+  label.style.fontWeight = 'bold';
+  label.style.padding = '2px 6px';
+  label.style.borderRadius = '4px';
+  label.style.boxShadow = '0 2px 4px rgba(0,0,0,0.2)';
+  overlay.appendChild(label);
+  
+  document.body.appendChild(overlay);
+  
+  setTimeout(() => {
+    overlay.style.transform = 'scale(1.1)';
+    overlay.style.opacity = '0';
+  }, 500);
+  
+  setTimeout(() => {
+    if (overlay.parentNode) overlay.parentNode.removeChild(overlay);
+  }, 1000);
 }
 

@@ -7,6 +7,9 @@
 <body>
   <!-- Canvas used for rendering screenshots and drawing redaction bounding boxes later -->
   <canvas id="vision-canvas" style="display: none;"></canvas>
+  <script src="lib/node_modules/tesseract.js/dist/tesseract.min.js"></script>
+  <!-- Need to import the firewall engine for sanitization -->
+  <script src="content.js"></script>
   <script src="offscreen.js"></script>
 </body>
 </html>

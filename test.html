@@ -3,84 +3,390 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>DRISHTI AI — Privacy Firewall Test Suite</title>
+    <title>DRISHTI AI — Demo Environment</title>
     <style>
-        body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; padding: 24px; max-width: 900px; margin: 0 auto; background: #fafafa; color: #333; }
-        h1 { color: #111; margin-bottom: 8px; }
-        p.subtitle { color: #666; margin-bottom: 24px; }
-        .test-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; }
-        .test-box { background: #fff; border: 1px solid #e0e0e0; padding: 16px; border-radius: 8px; box-shadow: 0 1px 3px rgba(0,0,0,0.05); }
-        .test-box h2 { font-size: 15px; margin-top: 0; margin-bottom: 10px; color: #2e7d32; }
-        .test-box p { font-size: 13.5px; line-height: 1.5; margin: 6px 0; }
-        .field-group { margin-top: 10px; display: flex; gap: 8px; }
-        input[type="text"] { flex: 1; padding: 6px 10px; border: 1px solid #ccc; border-radius: 4px; font-size: 13px; }
-        button { padding: 6px 12px; background: #2e7d32; color: #fff; border: none; border-radius: 4px; cursor: pointer; font-size: 13px; font-weight: 500; }
-        button:hover { background: #1b5e20; }
-        code { background: #eee; padding: 2px 5px; border-radius: 3px; font-size: 12.5px; }
+        :root {
+            --primary: #2563eb;
+            --primary-hover: #1d4ed8;
+            --bg-color: #f8fafc;
+            --surface: #ffffff;
+            --text-main: #0f172a;
+            --text-muted: #64748b;
+            --border: #e2e8f0;
+            --success: #10b981;
+            --danger: #ef4444;
+        }
+
+        * {
+            box-sizing: border-box;
+            margin: 0;
+            padding: 0;
+        }
+
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
+            background-color: var(--bg-color);
+            color: var(--text-main);
+            line-height: 1.5;
+            padding: 40px 20px;
+        }
+
+        .container {
+            max-width: 1000px;
+            margin: 0 auto;
+        }
+
+        .header {
+            text-align: center;
+            margin-bottom: 40px;
+        }
+
+        .header h1 {
+            font-size: 2.5rem;
+            font-weight: 800;
+            letter-spacing: -0.025em;
+            color: var(--text-main);
+            margin-bottom: 12px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 12px;
+        }
+
+        .header p {
+            font-size: 1.1rem;
+            color: var(--text-muted);
+            max-width: 600px;
+            margin: 0 auto;
+        }
+
+        .section-title {
+            font-size: 1.25rem;
+            font-weight: 600;
+            margin-bottom: 16px;
+            color: var(--text-main);
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            border-bottom: 2px solid var(--border);
+            padding-bottom: 8px;
+        }
+
+        .grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(400px, 1fr));
+            gap: 24px;
+            margin-bottom: 48px;
+        }
+
+        .card {
+            background: var(--surface);
+            border: 1px solid var(--border);
+            border-radius: 12px;
+            padding: 24px;
+            box-shadow: 0 4px 6px -1px rgb(0 0 0 / 0.05);
+            transition: transform 0.2s ease, box-shadow 0.2s ease;
+        }
+
+        .card:hover {
+            box-shadow: 0 10px 15px -3px rgb(0 0 0 / 0.1);
+            transform: translateY(-2px);
+        }
+
+        .card-header {
+            margin-bottom: 16px;
+        }
+
+        .card-title {
+            font-size: 1.1rem;
+            font-weight: 600;
+            color: var(--primary);
+            margin-bottom: 4px;
+        }
+
+        .card-desc {
+            font-size: 0.9rem;
+            color: var(--text-muted);
+        }
+
+        /* Forms */
+        .form-group {
+            margin-bottom: 16px;
+        }
+
+        .form-row {
+            display: flex;
+            gap: 12px;
+            margin-bottom: 16px;
+        }
+
+        .form-row > * {
+            flex: 1;
+        }
+
+        label {
+            display: block;
+            font-size: 0.875rem;
+            font-weight: 500;
+            margin-bottom: 6px;
+            color: var(--text-main);
+        }
+
+        input[type="text"],
+        input[type="email"],
+        input[type="tel"] {
+            width: 100%;
+            padding: 10px 12px;
+            border: 1px solid var(--border);
+            border-radius: 6px;
+            font-size: 0.95rem;
+            transition: border-color 0.2s, box-shadow 0.2s;
+            outline: none;
+        }
+
+        input:focus {
+            border-color: var(--primary);
+            box-shadow: 0 0 0 3px rgba(37, 99, 235, 0.1);
+        }
+
+        .checkbox-group {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+
+        button {
+            background: var(--primary);
+            color: white;
+            border: none;
+            padding: 10px 16px;
+            border-radius: 6px;
+            font-weight: 500;
+            font-size: 0.95rem;
+            cursor: pointer;
+            transition: background 0.2s;
+            width: 100%;
+        }
+
+        button:hover {
+            background: var(--primary-hover);
+        }
+
+        /* PII Data Display */
+        .data-row {
+            display: flex;
+            justify-content: space-between;
+            padding: 10px 0;
+            border-bottom: 1px solid var(--border);
+            font-size: 0.95rem;
+        }
+        
+        .data-row:last-child {
+            border-bottom: none;
+        }
+
+        .data-label {
+            color: var(--text-muted);
+            font-weight: 500;
+        }
+
+        .data-value {
+            font-family: 'SFMono-Regular', Consolas, 'Liberation Mono', Menlo, monospace;
+            color: var(--text-main);
+            font-weight: 600;
+            background: #f1f5f9;
+            padding: 2px 8px;
+            border-radius: 4px;
+        }
+
+        .badge {
+            display: inline-block;
+            padding: 4px 8px;
+            border-radius: 12px;
+            font-size: 0.75rem;
+            font-weight: 600;
+            background: #dbeafe;
+            color: #1e40af;
+            margin-bottom: 16px;
+        }
+
     </style>
 </head>
 <body>
-    <h1>🛡️ DRISHTI AI Privacy Firewall Test Suite</h1>
-    <p class="subtitle">Use this interactive page to verify real-time PII redactions, custom blacklist rules, and whitelist overrides.</p>
-    
-    <div class="test-grid">
-        <!-- 1. Contact Info -->
-        <div class="test-box">
-            <h2>1. Contact Information (Email & Phone)</h2>
-            <p>Public Support: <a href="mailto:support@drishti.ai">support@drishti.ai</a></p>
-            <p>Personal Email: <strong>raunak.manna@example.com</strong></p>
-            <p>US Toll-Free: <strong>800-555-1234</strong></p>
-            <p>India Mobile: <strong>+91 9876543210</strong></p>
-            <div class="field-group">
-                <input type="text" value="john.doe@enterprise.com" placeholder="Enter email">
-                <button>Save Email</button>
+
+<div class="container">
+    <div class="header">
+        <h1>🛡️ DrishtiAI Demo Environment</h1>
+        <p>A professional testing ground for evaluating Autonomous Agent actions and Real-Time Privacy Firewall redactions.</p>
+    </div>
+
+    <!-- SECTION 1: AUTONOMOUS AGENT -->
+    <h2 class="section-title">🤖 1. Autonomous Agent Testing</h2>
+    <div class="grid" style="grid-template-columns: 1fr;">
+        <div class="card" style="border-top: 4px solid var(--primary);">
+            <div class="card-header">
+                <span class="badge">TEST: MULTI-ACTION BATCHING</span>
+                <h3 class="card-title">Complex Data Entry Form</h3>
+                <p class="card-desc">Prompt the agent to fill this form completely in a single loop. <em>(e.g., "Fill out the form with John Doe, john@example.com, 555-1234, accept terms, and submit.")</em></p>
             </div>
-        </div>
+            
+            <form id="agent-test-form" onsubmit="event.preventDefault(); alert('Agent successfully submitted the form!');">
+                <div class="form-row">
+                    <div>
+                        <label for="fname">First Name</label>
+                        <input type="text" id="fname" placeholder="Enter first name" />
+                    </div>
+                    <div>
+                        <label for="lname">Last Name</label>
+                        <input type="text" id="lname" placeholder="Enter last name" />
+                    </div>
+                </div>
 
-        <!-- 2. Financial & SSN -->
-        <div class="test-box">
-            <h2>2. Financial & US Social Security</h2>
-            <p>Visa Card: <code>4111-2222-3333-4444</code></p>
-            <p>Mastercard: <code>5500 0000 0000 0004</code></p>
-            <p>US SSN: <strong>123-45-6789</strong></p>
-            <div class="field-group">
-                <input type="text" value="4242 4242 4242 4242" placeholder="Credit Card Number" name="cardnumber">
-            </div>
-        </div>
+                <div class="form-row">
+                    <div>
+                        <label for="email-primary">Email Address</label>
+                        <input type="email" id="email-primary" placeholder="Enter email" />
+                    </div>
+                    <div>
+                        <label for="phone">Phone Number</label>
+                        <input type="tel" id="phone" placeholder="Enter phone" />
+                    </div>
+                </div>
 
-        <!-- 3. Indian Identity (Aadhaar & PAN) -->
-        <div class="test-box">
-            <h2>3. Indian Identity (Aadhaar & PAN)</h2>
-            <p>Aadhaar UID: <strong>2345-6789-0123</strong></p>
-            <p>PAN Card Number: <strong>ABCDE1234F</strong></p>
-            <p>Alternate PAN: <strong>BNZPK9876X</strong></p>
-        </div>
+                <div class="form-group checkbox-group" style="margin-bottom: 24px;">
+                    <input type="checkbox" id="agree-terms" />
+                    <label for="agree-terms" style="margin-bottom: 0;">I agree to the Terms and Conditions</label>
+                </div>
 
-        <!-- 4. Developer Secrets & API Keys -->
-        <div class="test-box">
-            <h2>4. API Keys & Auth Secrets</h2>
-            <p>OpenAI Key: <code>sk-proj-abc123456789012345678901234567890</code></p>
-            <p>GitHub Token: <code>ghp_123456789012345678901234567890123456</code></p>
-            <p>JWT Token: <code>eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiIxMjM0NTY3ODkwIn0.doNotLeakThisSignature123456</code></p>
-        </div>
-
-        <!-- 5. Network & Web3 -->
-        <div class="test-box">
-            <h2>5. Network IPs & Crypto Wallets</h2>
-            <p>Internal Server IP: <strong>192.168.1.100</strong></p>
-            <p>Public Gateway: <strong>142.250.190.46</strong></p>
-            <p>Ethereum Wallet: <code>0x71C66332e333D349925A1B88B2c5e533F9744186</code></p>
-            <p>Bitcoin Wallet: <code>bc1qar0srrr7xfkvy5l643lydnw9re59gtzzwf5mdq</code></p>
-        </div>
-
-        <!-- 6. Passport & Custom Redaction -->
-        <div class="test-box">
-            <h2>6. Passport & Custom Blacklist/Whitelist</h2>
-            <p>Passport Number: <strong>A12345678</strong></p>
-            <p>Confidential Code: <strong>Project Drishti Aegis Internal</strong></p>
-            <p>Personal Full Name: <strong>Raunak Manna</strong></p>
-            <p>Whitelisted Domain: <strong>https://drishti.ai/terms</strong></p>
+                <button type="submit" id="agent-submit-btn">Submit Application</button>
+            </form>
         </div>
     </div>
+
+    <!-- SECTION 2: PRIVACY FIREWALL -->
+    <h2 class="section-title">🔐 2. Privacy Firewall Testing</h2>
+    <div class="grid">
+        
+        <!-- PII Box 1 -->
+        <div class="card">
+            <div class="card-header">
+                <span class="badge" style="background: #fce7f3; color: #9d174d;">TEST: PII DETECTORS</span>
+                <h3 class="card-title">Identity & Contact Info</h3>
+                <p class="card-desc">Verify that the JSON payload redacts these emails and phone numbers.</p>
+            </div>
+            <div class="data-row">
+                <span class="data-label">Personal Email</span>
+                <span class="data-value">raunak.manna@example.com</span>
+            </div>
+            <div class="data-row">
+                <span class="data-label">Public Support (Whitelist)</span>
+                <span class="data-value">support@drishti.ai</span>
+            </div>
+            <div class="data-row">
+                <span class="data-label">US Mobile</span>
+                <span class="data-value">800-555-1234</span>
+            </div>
+            <div class="data-row">
+                <span class="data-label">India Mobile</span>
+                <span class="data-value">+91 9876543210</span>
+            </div>
+        </div>
+
+        <!-- PII Box 2 -->
+        <div class="card">
+            <div class="card-header">
+                <span class="badge" style="background: #fef3c7; color: #b45309;">TEST: FINANCIAL & GOV</span>
+                <h3 class="card-title">Financial & Indian Identity</h3>
+                <p class="card-desc">Ensure credit cards, Aadhaar, and PAN cards are caught by the firewall.</p>
+            </div>
+            <div class="data-row">
+                <span class="data-label">Visa Card</span>
+                <span class="data-value">4111-2222-3333-4444</span>
+            </div>
+            <div class="data-row">
+                <span class="data-label">US SSN</span>
+                <span class="data-value">123-45-6789</span>
+            </div>
+            <div class="data-row">
+                <span class="data-label">Aadhaar UID</span>
+                <span class="data-value">2345-6789-0123</span>
+            </div>
+            <div class="data-row">
+                <span class="data-label">PAN Card</span>
+                <span class="data-value">ABCDE1234F</span>
+            </div>
+        </div>
+
+        <!-- PII Box 3 -->
+        <div class="card">
+            <div class="card-header">
+                <span class="badge" style="background: #e0e7ff; color: #4338ca;">TEST: DEVELOPER SECRETS</span>
+                <h3 class="card-title">Developer Secrets & Web3</h3>
+                <p class="card-desc">Verify that API keys, IPs, and Wallets are scrubbed from the DOM.</p>
+            </div>
+            <div class="data-row">
+                <span class="data-label">OpenAI Key</span>
+                <span class="data-value">sk-proj-abc1234567890</span>
+            </div>
+            <div class="data-row">
+                <span class="data-label">Internal IP</span>
+                <span class="data-value">192.168.1.100</span>
+            </div>
+            <div class="data-row">
+                <span class="data-label">ETH Wallet</span>
+                <span class="data-value">0x71C66332e333D3499...</span>
+            </div>
+            <div class="data-row">
+                <span class="data-label">Custom Keyword</span>
+                <span class="data-value">Project Drishti Aegis</span>
+            </div>
+        </div>
+
+        <!-- OCR Box 4 -->
+        <div class="card" style="grid-column: 1 / -1;">
+            <div class="card-header">
+                <span class="badge" style="background: #e5e7eb; color: #374151;">TEST: VISUAL OCR ENGINE (PHASE 10)</span>
+                <h3 class="card-title">Canvas / Image Obfuscation Test</h3>
+                <p class="card-desc">The following code is drawn natively onto a `<canvas>` element. It is completely invisible to the DOM Scraper. Ask the agent to "Read the confirmation code".</p>
+            </div>
+            <div style="background: #1e293b; padding: 24px; border-radius: 8px; text-align: center; margin-top: 16px;">
+                <canvas id="ocr-test-canvas" width="400" height="100"></canvas>
+            </div>
+        </div>
+
+    </div>
+
+</div>
+
+<script>
+    // Draw text onto canvas to hide it from DOM extraction
+    window.onload = () => {
+        const canvas = document.getElementById('ocr-test-canvas');
+        if (canvas) {
+            const ctx = canvas.getContext('2d');
+            
+            // Background
+            ctx.fillStyle = '#1e293b';
+            ctx.fillRect(0, 0, canvas.width, canvas.height);
+            
+            // Noise/Lines to simulate captcha/obfuscation
+            for(let i=0; i<5; i++) {
+                ctx.strokeStyle = `rgba(255, 255, 255, 0.1)`;
+                ctx.lineWidth = Math.random() * 3;
+                ctx.beginPath();
+                ctx.moveTo(Math.random() * canvas.width, Math.random() * canvas.height);
+                ctx.lineTo(Math.random() * canvas.width, Math.random() * canvas.height);
+                ctx.stroke();
+            }
+
+            // Secret Text
+            ctx.fillStyle = '#10b981';
+            ctx.font = 'bold 32px "Courier New", Courier, monospace';
+            ctx.textAlign = 'center';
+            ctx.textBaseline = 'middle';
+            ctx.fillText('CONFIRMATION: 9948-AB', canvas.width/2, canvas.height/2);
+        }
+    };
+</script>
 </body>
 </html>

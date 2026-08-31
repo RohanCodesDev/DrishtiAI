@@ -33,6 +33,11 @@ app.post('/api/analyze', async (req, res) => {
     console.log(`Title: ${sanitizedData.title}`);
     console.log(`Elements: ${sanitizedData.element_count}`);
     console.log(`Firewall Active Rules: ${sanitizedData.firewall_active_rules}`);
+    if (sanitizedData.visual_context) {
+      console.log(`Visual OCR Text: "${sanitizedData.visual_context.replace(/\n+/g, ' ').trim()}"`);
+    } else {
+      console.log(`Visual OCR Text: NOT PROVIDED`);
+    }
     
     // Initialize Groq SDK (requires process.env.GROQ_API_KEY)
     if (!process.env.GROQ_API_KEY) {
@@ -43,7 +48,7 @@ app.post('/api/analyze', async (req, res) => {
     
     console.log('--- Querying Groq... ---');
     console.log(`User Task: ${sanitizedData.userTask || 'None'}`);
-    const userPrompt = buildUserPrompt(sanitizedData, sanitizedData.userTask);
+    const userPrompt = buildUserPrompt(sanitizedData, sanitizedData.userTask, sanitizedData.actionHistory);
 
     const chatCompletion = await groq.chat.completions.create({
       messages: [
@@ -56,11 +61,16 @@ app.post('/api/analyze', async (req, res) => {
           content: userPrompt
         }
       ],
-      model: 'qwen/qwen3.8-27b',
-      response_format: { type: 'json_object' }
+      model: 'openai/gpt-oss-20b'
     });
 
-    const responseText = chatCompletion.choices[0]?.message?.content || '{}';
+    let responseText = chatCompletion.choices[0]?.message?.content || '{}';
+
+    // Regex extraction to cleanly extract JSON even if LLM hallucinated markdown/text
+    const jsonMatch = responseText.match(/\{[\s\S]*\}|\[[\s\S]*\]/);
+    if (jsonMatch) {
+      responseText = jsonMatch[0];
+    }
 
     let aiAction = {};
     try {
@@ -75,6 +85,19 @@ app.post('/api/analyze', async (req, res) => {
 
   } catch (error) {
     console.error('Error during analysis:', error);
+    
+    // Check if it is a Groq Rate Limit Error (Status 429 or 413 Payload Too Large)
+    const isRateLimit = error.status === 429 || error.status === 413 || 
+      (error?.error?.error?.code === 'rate_limit_exceeded');
+      
+    if (isRateLimit) {
+      return res.status(429).json({ 
+        success: false, 
+        error: 'RATE_LIMIT_EXCEEDED', 
+        message: 'Groq API rate limit or token payload exceeded.' 
+      });
+    }
+
     res.status(500).json({ success: false, error: 'Internal server error.' });
   }
 });

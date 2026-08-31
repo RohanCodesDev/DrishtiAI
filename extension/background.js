@@ -146,6 +146,39 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
     (async () => {
       try {
         const domData = await getTabDOM(message.tabId, message.config);
+        
+        // Phase 10: Capture Screenshot and Run OCR
+        try {
+          // Take screenshot of active tab (requires activeTab permission or tabs + host)
+          const dataUrl = await chrome.tabs.captureVisibleTab(null, { format: 'png' });
+          
+          if (dataUrl) {
+            // Send to Offscreen Document for OCR
+            const ocrResponse = await new Promise((resolve) => {
+              chrome.runtime.sendMessage({
+                target: 'offscreen',
+                type: 'RUN_OCR',
+                dataUrl: dataUrl
+              }, (res) => {
+                if (chrome.runtime.lastError) {
+                  resolve(null);
+                } else {
+                  resolve(res);
+                }
+              });
+            });
+
+            if (ocrResponse && ocrResponse.success && ocrResponse.text) {
+              domData.visual_context = ocrResponse.text;
+            } else {
+              domData.visual_context = "(No visual text detected or OCR failed)";
+            }
+          }
+        } catch (visionErr) {
+          console.warn('Vision OCR skipped or failed:', visionErr.message);
+          domData.visual_context = "(OCR capture blocked: " + visionErr.message + " - NOTE: If testing on a local file, ensure 'Allow access to file URLs' is enabled in chrome://extensions for this extension)";
+        }
+
         sendResponse({ success: true, data: domData });
       } catch (err) {
         sendResponse({

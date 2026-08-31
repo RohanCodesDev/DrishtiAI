@@ -505,7 +505,7 @@
     }
 
     if (runAgentBtn && taskInput) {
-      async function executeAgentStep(loopCount = 1) {
+      async function executeAgentStep(loopCount = 1, actionHistory = []) {
         if (loopCount > 10) {
           if (aiResponseText) aiResponseText.innerHTML += '<br/><strong>Loop Limit Reached (10).</strong>';
           runAgentBtn.textContent = 'Run Agent';
@@ -532,6 +532,7 @@
         try {
           const payload = JSON.parse(currentJsonText);
           payload.userTask = userTask;
+          payload.actionHistory = actionHistory;
           
           const response = await fetch('http://localhost:3000/api/analyze', {
             method: 'POST',
@@ -542,7 +543,56 @@
           const result = await response.json();
           let isDone = false;
           
-          if (result.success && result.ai_response) {
+          if (result.success && result.ai_response && result.ai_response.actions) {
+            const actions = result.ai_response.actions;
+            
+            if (aiResponseText) {
+              let html = `<strong>[Loop ${loopCount}] Planned ${actions.length} Actions:</strong><br/>`;
+              actions.forEach((ai, idx) => {
+                html += `<em>${idx + 1}. ${ai.action}</em>`;
+                if (ai.target_id) html += ` (Target: ${ai.target_id})`;
+                if (ai.value) html += ` (Value: ${ai.value})`;
+                html += `<br/>`;
+              });
+              aiResponseText.innerHTML = html;
+            }
+            
+            for (const ai of actions) {
+              if (ai.action === 'DONE') {
+                isDone = true;
+                break;
+              } else if (ai.action === 'REPLY') {
+                // If it's a direct message to the user, render it and record success.
+                actionHistory.push({ action: ai.action, target: 'USER', value: ai.value, execution_result: 'SUCCESS' });
+                if (aiResponseText) aiResponseText.innerHTML += `<br/><strong style="color: #22c55e;">🤖 Agent Reply:</strong> ${ai.value}`;
+                isDone = true; // A reply usually signifies the end of a question objective.
+                break;
+              } else if (ai.action === 'WAIT') {
+                // Actually pause execution for the wait command
+                actionHistory.push({ action: ai.action, target: 'N/A', value: '2000ms', execution_result: 'SUCCESS' });
+                if (aiResponseText) aiResponseText.innerHTML += `<br/><span style="color: #f59e0b;">⏳ Waiting...</span>`;
+                await new Promise(resolve => setTimeout(resolve, 2000));
+              } else if (ai.action) {
+                // Forward action to background to execute in content script
+                const feedback = await new Promise((resolve) => {
+                  chrome.runtime.sendMessage({
+                    type: 'EXECUTE_ACTION',
+                    tabId: boundTabId,
+                    action: ai
+                  }, (res) => {
+                    resolve(res);
+                  });
+                });
+                
+                const executionResult = (feedback && feedback.success) ? 'SUCCESS' : ('FAILED: ' + (feedback?.error || 'Unknown error'));
+                actionHistory.push({ action: ai.action, target: ai.target_id, value: ai.value, execution_result: executionResult });
+                
+                // Micro-delay between actions in the same loop
+                await new Promise(resolve => setTimeout(resolve, 100));
+              }
+            }
+          } else if (result.success && result.ai_response && result.ai_response.action) {
+            // Fallback for single action response from LLM if it disobeys schema
             const ai = result.ai_response;
             if (aiResponseText) {
               let html = `<strong>[Loop ${loopCount}] Action:</strong> ${ai.action}`;
@@ -554,36 +604,66 @@
             
             if (ai.action === 'DONE') {
               isDone = true;
-            } else if (ai.action && ai.action !== 'WAIT') {
-              // Forward action to background to execute in content script
-              chrome.runtime.sendMessage({
-                type: 'EXECUTE_ACTION',
-                tabId: boundTabId,
-                action: ai
+            } else if (ai.action === 'REPLY') {
+              actionHistory.push({ action: ai.action, target: 'USER', value: ai.value, execution_result: 'SUCCESS' });
+              if (aiResponseText) aiResponseText.innerHTML += `<br/><strong style="color: #22c55e;">🤖 Agent Reply:</strong> ${ai.value}`;
+              isDone = true;
+            } else if (ai.action === 'WAIT') {
+              actionHistory.push({ action: ai.action, target: 'N/A', value: '2000ms', execution_result: 'SUCCESS' });
+              if (aiResponseText) aiResponseText.innerHTML += `<br/><span style="color: #f59e0b;">⏳ Waiting...</span>`;
+              await new Promise(resolve => setTimeout(resolve, 2000));
+            } else if (ai.action) {
+              const feedback = await new Promise((resolve) => {
+                chrome.runtime.sendMessage({
+                  type: 'EXECUTE_ACTION',
+                  tabId: boundTabId,
+                  action: ai
+                }, (res) => {
+                  resolve(res);
+                });
               });
+              
+              const executionResult = (feedback && feedback.success) ? 'SUCCESS' : ('FAILED: ' + (feedback?.error || 'Unknown error'));
+              actionHistory.push({ action: ai.action, target: ai.target_id, value: ai.value, execution_result: executionResult });
             }
+          } else if (result.error === 'RATE_LIMIT_EXCEEDED') {
+            if (aiResponseText) aiResponseText.innerHTML += '<br/><strong>⏳ Rate Limit Hit! Backing off for 6 seconds before retrying...</strong>';
+            if (autoLoopCb && autoLoopCb.checked) {
+              setTimeout(async () => {
+                await loadBoundTabDOM();
+                executeAgentStep(loopCount, actionHistory); // Retry the exact same loop
+              }, 6000);
+            }
+            return;
           } else {
-            if (aiResponseText) aiResponseText.textContent = `Error: ${result.error || 'Unknown error'}`;
+            if (aiResponseText) aiResponseText.textContent = `Error: ${result.error || result.message || 'Unknown error'}`;
             isDone = true; // Stop loop on error
           }
 
           // Handle Auto-Looping
           if (!isDone && autoLoopCb && autoLoopCb.checked) {
-            if (aiResponseText) aiResponseText.innerHTML += '<br/><em>Waiting for DOM update...</em>';
+            if (aiResponseText) {
+              aiResponseText.innerHTML += `<br/><br/><div style="padding: 8px; background: #1e3a8a; color: #93c5fd; border-radius: 4px; font-size: 11px; text-align: center; border: 1px dashed #3b82f6;">
+                <strong>🔄 Autonomous Mode Active</strong><br/>
+                <em>Evaluating results and preparing Loop ${loopCount + 1}...</em>
+              </div>`;
+            }
             
-            // Wait 1.5s for page to reflect action
-            setTimeout(() => {
-              // Re-fetch DOM
-              loadBoundTabDOM();
-              // Wait 500ms for DOM fetch to finish, then recurse
-              setTimeout(() => {
-                executeAgentStep(loopCount + 1);
-              }, 500);
-            }, 1500);
+            // Disable button during auto-loop
+            if (runAgentBtn) {
+              runAgentBtn.disabled = true;
+              runAgentBtn.textContent = 'Agent Running...';
+            }
+            
+            setTimeout(async () => {
+              await loadBoundTabDOM();
+              executeAgentStep(loopCount + 1, actionHistory);
+            }, 2500);
           } else {
-            // Finish
-            runAgentBtn.textContent = 'Run Agent';
-            runAgentBtn.disabled = false;
+            if (runAgentBtn) {
+              runAgentBtn.disabled = false;
+              runAgentBtn.textContent = 'Run Agent';
+            }
           }
 
         } catch (err) {
@@ -594,7 +674,7 @@
         }
       }
 
-      runAgentBtn.addEventListener('click', () => executeAgentStep(1));
+      runAgentBtn.addEventListener('click', () => executeAgentStep(1, []));
     }
 
     // Listen for tab switching and navigation events

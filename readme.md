@@ -86,29 +86,32 @@ As this is a learning journey from absolute beginner to industry-level, the foll
 * [x] **Phase 5:** PII / Sensitive Information Detection (Finding emails, passwords, phones).
 * [x] **Phase 6:** Privacy Firewall & Redaction (Masking PII before it can leave the extension).
 
-### Backend & Intelligence
-* [ ] **Phase 7:** Backend Server (Express API integration).
-* [ ] **Phase 8:** AI / LLM Reasoning (Sending sanitized data to get structured actions).
-* [ ] **Phase 9:** Safe Browser Actions (Executing clicks/scrolls with risk validation).
+### Backend & Intelligence (Completed)
+* [x] **Phase 7:** Backend Server (Express API integration).
+* [x] **Phase 8:** AI / LLM Reasoning (Sending sanitized data to Groq to get structured JSON actions).
+* [x] **Phase 9:** Safe Browser Actions & Auto-Loop (Executing multi-action clicks/scrolls with execution feedback and memory).
 
-### Advanced Vision & Optimization
-* [ ] **Phase 10:** OCR Integration (Reading text from screenshots locally).
-* [ ] **Phase 11:** Local Computer Vision (Lightweight models for visual region analysis).
-* [ ] **Phase 12:** ONNX + WebGPU (Optimizing inference speed in the browser).
-* [ ] **Phase 13:** System Optimization (Caching, Debouncing, Lazy processing).
+### Advanced Vision & Optimization (Active Development)
+* [ ] **Phase 10:** OCR Integration (Reading text from screenshots locally via Tesseract.js & Offscreen Document — *In Progress: Refining viewport capture & accuracy*).
+* [ ] **Phase 11:** Local Computer Vision & Web Lens ("Click-to-Inspect" & visual region bounding boxes).
+* [ ] **Phase 12:** Conversational Agent & Web Search (Multi-turn chat, page Q&A, and autonomous Google/DuckDuckGo web research).
+* [ ] **Phase 13:** ONNX + WebGPU & System Optimization (Caching, debouncing, lazy local inference).
 
 ### SIH Final Polish
-* [ ] **Phase 14:** Benchmarking & Evaluation (Proving privacy claims and performance metrics).
-* [ ] **Phase 15:** Industry/SIH Polish (Professional UI, Demo Environments, Security Hardening).
+* [ ] **Phase 14:** Benchmarking & Evaluation (Privacy Audit Certificate, 0-leak verification, latency charts).
+* [ ] **Phase 15:** Industry/SIH Presentation Polish (Modern glassmorphic UI, Demo Environments, Security Hardening).
 
 ---
 
 ## 6. Current Status 
 
-We have successfully completed up through **Phase 6**.
-* The Git repository is initialized.
-* The folder structure is established.
-* A working Manifest V3 extension exists in `extension/`, featuring a persistent side panel and a complex DOM extraction script.
-* A local **Privacy Firewall** is actively running, which detects and physically redacts PII (emails/phones) from both element text and attributes before finalizing the JSON.
+We have completed **Phases 0 through 9**, with **Phase 10 (Local Vision / OCR)** actively in progress:
+* **Manifest V3 Extension:** Tab-bound persistent side panel with real-time UI and DevTools debugging.
+* **Privacy Firewall Engine:** Locally redacts 10+ PII categories (SSN, Aadhaar, PAN, Emails, API Keys, Cards) plus custom Regex Whitelist/Blacklist.
+* **Local Vision & OCR (Phase 10 — In Progress):** Offscreen document architecture implemented with `Tesseract.js` WASM workers and local redaction pipeline. Currently refining viewport screenshot synchronization for Canvas/obfuscated elements.
+* **Autonomous Reasoning Loop:** Multi-Action batching, action history memory, precision element scroll-into-view, visual green overlays, rate-limit backoff, and direct `REPLY` capability.
+* **Hot-Reloadable Backend:** Express server with `--watch` mode and token tree compression (`compressTree`) preventing TPM overflow.
 
-**Next step:** Initiate **Phase 7** when ready.
+**Next Immediate Steps:**
+1. Finalize Phase 10 OCR screenshot-to-worker synchronization.
+2. Implement Phase 11 & 12: Conversational Chat Mode & "Click-to-Inspect" Web Lens.
