@@ -12,7 +12,7 @@
 
 const assert = require('assert');
 const http = require('http');
-const { compressTree, buildUserPrompt } = require('./agent/prompts');
+const { compressTree, buildUserPrompt, AGENT_SYSTEM_PROMPT } = require('./agent/prompts');
 const { SingleActionSchema, ActionResponseSchema, validateActions, collectElementIds } = require('./agent/actions');
 const { DRISHTI_TOOLS } = require('./agent/tools');
 const { runAgentGraph } = require('./agent/graph');
@@ -130,6 +130,11 @@ async function main() {
     assert.ok(prompt.includes('AGENT OBJECTIVE: Fill the form'));
     assert.ok(prompt.includes('[Step 1] Action: CLICK, Target: element_2'));
     assert.ok(prompt.includes('DOM DATA:'));
+  });
+
+  runTest('Agent system prompt contains guidelines for unstructured text & definitions', () => {
+    assert.ok(AGENT_SYSTEM_PROMPT.includes('UNSTRUCTURED / RANDOM TEXT / DEFINITIONS'));
+    assert.ok(AGENT_SYSTEM_PROMPT.includes('Simply SUMMARIZE, DEFINE, or EXPLAIN that text/topic directly to the user using a "REPLY" action!'));
   });
 
   // TEST 2: Zod Schemas & Tool Definitions
