@@ -32,6 +32,9 @@
 
       <!-- Header Action Controls -->
       <div class="header-actions">
+        <button id="inspect-lens-btn" class="icon-btn-header btn-lens" title="Click-to-Inspect Web Lens (Hover & select element)" aria-label="Web Lens Inspector">
+          <i class="ti ti-scan"></i>
+        </button>
         <button id="new-chat-btn" class="icon-btn-header" title="New Chat / Clear Conversation" aria-label="New Chat">
           <i class="ti ti-plus"></i>
         </button>
@@ -153,6 +156,10 @@
 
         <div class="composer-toolbar">
           <div class="toolbar-left">
+            <button id="composer-inspect-btn" class="composer-lens-btn" title="Click-to-Inspect Web Lens (Select element on webpage)" type="button">
+              <i class="ti ti-scan"></i>
+              <span>Lens</span>
+            </button>
             <label class="auto-loop-toggle" title="Automatically evaluate next browser steps iteratively (up to 10 loops)">
               <input type="checkbox" id="auto-loop-cb" checked>
               <span class="loop-toggle-slider" aria-hidden="true"></span>

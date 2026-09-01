@@ -739,6 +739,22 @@ if (typeof chrome !== 'undefined' && chrome.runtime && chrome.runtime.onMessage 
       return true;
     }
 
+    // Interactive Web Lens Toggle
+    if (message && message.type === 'TOGGLE_INSPECT_MODE') {
+      if (message.enabled) {
+        startInspectMode();
+      } else {
+        stopInspectMode();
+      }
+      sendResponse({ success: true, isInspectModeActive });
+      return true;
+    }
+
+    if (message && message.type === 'PING_INSPECT_MODE') {
+      sendResponse({ success: true, isInspectModeActive });
+      return true;
+    }
+
     if (message && message.type === 'EXECUTE_ACTION') {
       const ai = message.action;
       console.log('DrishtiAI executing action:', ai);
@@ -746,6 +762,18 @@ if (typeof chrome !== 'undefined' && chrome.runtime && chrome.runtime.onMessage 
       let targetElement = null;
       if (ai.target_id) {
         targetElement = document.querySelector(`[data-drishti-id="${ai.target_id}"]`);
+        if (!targetElement) {
+          // If data-drishti-id attributes are not yet stamped on this fresh page, index the DOM
+          if (!document.querySelector('[data-drishti-id]')) {
+            try { getStructuredDOM(currentFirewallConfig); } catch (e) {}
+            targetElement = document.querySelector(`[data-drishti-id="${ai.target_id}"]`);
+          }
+        }
+        if (!targetElement) {
+          try {
+            targetElement = document.getElementById(ai.target_id) || document.querySelector(`[name="${ai.target_id}"], [aria-label="${ai.target_id}"]`);
+          } catch (e) {}
+        }
       }
 
       if (!targetElement && ai.action !== 'DONE' && ai.action !== 'WAIT' && ai.action !== 'SCROLL' && ai.action !== 'NAVIGATE' && ai.action !== 'NEW_TAB' && ai.action !== 'KEYPRESS') {
@@ -1065,6 +1093,459 @@ function highlightElement(el, actionType, isHighRisk = false) {
   }, 1400);
 }
 
+// ==========================================================================
+// Phase 11: Interactive "Click-to-Inspect" Web Lens Engine
+// ==========================================================================
+let isInspectModeActive = false;
+let currentHoveredElement = null;
+let lensReticleElement = null;
+let lensActionMenuElement = null;
+let lensHudBanner = null;
+
+function injectLensStyles() {
+  if (document.getElementById('drishti-lens-styles')) return;
+  const style = document.createElement('style');
+  style.id = 'drishti-lens-styles';
+  style.textContent = `
+    #drishti-lens-hud-banner {
+      position: fixed;
+      top: 14px;
+      right: 18px;
+      z-index: 2147483645;
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      background: rgba(15, 23, 42, 0.94);
+      backdrop-filter: blur(12px);
+      -webkit-backdrop-filter: blur(12px);
+      border: 1px solid rgba(99, 102, 241, 0.45);
+      box-shadow: 0 8px 32px rgba(0, 0, 0, 0.45), 0 0 16px rgba(99, 102, 241, 0.25);
+      border-radius: 9999px;
+      padding: 7px 14px 7px 16px;
+      color: #ffffff;
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+      font-size: 12px;
+      user-select: none;
+      animation: drishti-slide-in 0.3s cubic-bezier(0.16, 1, 0.3, 1);
+    }
+    .drishti-lens-banner-content {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+    .drishti-lens-pulse-dot {
+      width: 8px;
+      height: 8px;
+      border-radius: 50%;
+      background: #6366f1;
+      box-shadow: 0 0 8px #818cf8;
+      animation: drishti-lens-pulse 1.2s infinite ease-in-out;
+    }
+    .drishti-lens-banner-title {
+      font-weight: 700;
+      color: #a5b4fc;
+    }
+    .drishti-lens-banner-hint {
+      color: #94a3b8;
+      font-size: 11px;
+    }
+    .drishti-lens-banner-close {
+      background: rgba(255, 255, 255, 0.08);
+      border: none;
+      color: #cbd5e1;
+      width: 20px;
+      height: 20px;
+      border-radius: 50%;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      cursor: pointer;
+      font-size: 11px;
+      transition: all 0.15s ease;
+    }
+    .drishti-lens-banner-close:hover {
+      background: rgba(239, 68, 68, 0.3);
+      color: #fca5a5;
+    }
+    #drishti-lens-reticle {
+      position: absolute;
+      pointer-events: none;
+      z-index: 2147483640;
+      border: 2px solid #6366f1;
+      background: rgba(99, 102, 241, 0.12);
+      border-radius: 4px;
+      box-shadow: 0 0 14px rgba(99, 102, 241, 0.45);
+      transition: all 0.06s ease-out;
+      display: none;
+    }
+    .drishti-lens-badge {
+      position: absolute;
+      top: -24px;
+      left: 0;
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      background: #4f46e5;
+      color: #ffffff;
+      padding: 2px 8px;
+      border-radius: 4px;
+      font-size: 10.5px;
+      font-weight: 600;
+      white-space: nowrap;
+      box-shadow: 0 2px 6px rgba(0, 0, 0, 0.3);
+    }
+    .drishti-lens-badge-tag {
+      color: #c7d2fe;
+      font-family: monospace;
+    }
+    #drishti-lens-action-menu {
+      position: absolute;
+      z-index: 2147483646;
+      width: 320px;
+      background: rgba(15, 23, 42, 0.96);
+      backdrop-filter: blur(16px);
+      -webkit-backdrop-filter: blur(16px);
+      border: 1px solid rgba(99, 102, 241, 0.4);
+      box-shadow: 0 16px 36px rgba(0, 0, 0, 0.55), 0 0 20px rgba(99, 102, 241, 0.25);
+      border-radius: 12px;
+      padding: 10px 12px;
+      display: flex;
+      flex-direction: column;
+      gap: 8px;
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+      color: #ffffff;
+      user-select: none;
+      animation: drishti-menu-pop 0.2s cubic-bezier(0.16, 1, 0.3, 1);
+    }
+    .drishti-menu-header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 8px;
+      border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+      padding-bottom: 6px;
+    }
+    .drishti-menu-target-info {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      min-width: 0;
+      flex: 1;
+    }
+    .drishti-menu-tag {
+      font-family: monospace;
+      font-size: 10.5px;
+      font-weight: 700;
+      background: rgba(99, 102, 241, 0.25);
+      color: #a5b4fc;
+      border: 1px solid rgba(99, 102, 241, 0.4);
+      padding: 1px 5px;
+      border-radius: 4px;
+      flex-shrink: 0;
+    }
+    .drishti-menu-snippet {
+      font-size: 11px;
+      color: #cbd5e1;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
+    .drishti-menu-close {
+      background: transparent;
+      border: none;
+      color: #94a3b8;
+      cursor: pointer;
+      font-size: 12px;
+      padding: 2px 4px;
+      border-radius: 4px;
+    }
+    .drishti-menu-close:hover {
+      background: rgba(255, 255, 255, 0.1);
+      color: #ffffff;
+    }
+    .drishti-menu-actions {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 8px;
+    }
+    .drishti-btn-action {
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 6px;
+      padding: 7px 10px;
+      border-radius: 8px;
+      font-size: 11.5px;
+      font-weight: 600;
+      cursor: pointer;
+      border: none;
+      transition: all 0.18s ease;
+    }
+    .drishti-btn-summarize {
+      background: linear-gradient(135deg, #3b82f6, #1d4ed8);
+      color: #ffffff;
+      box-shadow: 0 2px 8px rgba(59, 130, 246, 0.35);
+    }
+    .drishti-btn-summarize:hover {
+      background: linear-gradient(135deg, #60a5fa, #2563eb);
+      transform: translateY(-1px);
+      box-shadow: 0 4px 12px rgba(59, 130, 246, 0.5);
+    }
+    .drishti-btn-search {
+      background: linear-gradient(135deg, #10b981, #047857);
+      color: #ffffff;
+      box-shadow: 0 2px 8px rgba(16, 185, 129, 0.35);
+    }
+    .drishti-btn-search:hover {
+      background: linear-gradient(135deg, #34d399, #059669);
+      transform: translateY(-1px);
+      box-shadow: 0 4px 12px rgba(16, 185, 129, 0.5);
+    }
+    @keyframes drishti-lens-pulse {
+      0%, 100% { opacity: 1; transform: scale(1); }
+      50% { opacity: 0.4; transform: scale(0.8); }
+    }
+    @keyframes drishti-slide-in {
+      from { opacity: 0; transform: translateY(-12px); }
+      to { opacity: 1; transform: translateY(0); }
+    }
+    @keyframes drishti-menu-pop {
+      from { opacity: 0; transform: scale(0.92); }
+      to { opacity: 1; transform: scale(1); }
+    }
+  `;
+  document.head.appendChild(style);
+}
+
+function startInspectMode() {
+  if (isInspectModeActive) return;
+  isInspectModeActive = true;
+  injectLensStyles();
+
+  // 1. Create Floating HUD Banner
+  if (!lensHudBanner) {
+    lensHudBanner = document.createElement('div');
+    lensHudBanner.id = 'drishti-lens-hud-banner';
+    lensHudBanner.innerHTML = `
+      <div class="drishti-lens-banner-content">
+        <span class="drishti-lens-pulse-dot"></span>
+        <span class="drishti-lens-banner-title">🔍 Drishti Web Lens</span>
+        <span class="drishti-lens-banner-hint">Hover &amp; Click any element to Summarize or Search (Esc to Exit)</span>
+      </div>
+      <button id="drishti-lens-banner-close" class="drishti-lens-banner-close" title="Exit Inspect Mode (Esc)">✕</button>
+    `;
+    document.body.appendChild(lensHudBanner);
+
+    const closeBtn = lensHudBanner.querySelector('#drishti-lens-banner-close');
+    if (closeBtn) {
+      closeBtn.addEventListener('click', (e) => {
+        e.stopPropagation();
+        stopInspectMode();
+        chrome.runtime.sendMessage({ type: 'INSPECT_MODE_STATE_CHANGED', enabled: false }).catch(() => {});
+      });
+    }
+  }
+
+  // 2. Create Reticle Highlight Element
+  if (!lensReticleElement) {
+    lensReticleElement = document.createElement('div');
+    lensReticleElement.id = 'drishti-lens-reticle';
+    lensReticleElement.innerHTML = `
+      <div class="drishti-lens-badge" id="drishti-lens-badge">
+        <span class="drishti-lens-badge-tag">&lt;DIV&gt;</span>
+        <span class="drishti-lens-badge-text">Element</span>
+      </div>
+    `;
+    document.body.appendChild(lensReticleElement);
+  }
+
+  // 3. Attach Event Listeners
+  document.addEventListener('mousemove', handleInspectMouseMove, true);
+  document.addEventListener('click', handleInspectClick, true);
+  document.addEventListener('keydown', handleInspectKeyDown, true);
+}
+
+function stopInspectMode() {
+  isInspectModeActive = false;
+
+  if (lensReticleElement) {
+    lensReticleElement.style.display = 'none';
+  }
+  if (lensActionMenuElement) {
+    lensActionMenuElement.remove();
+    lensActionMenuElement = null;
+  }
+  if (lensHudBanner) {
+    lensHudBanner.remove();
+    lensHudBanner = null;
+  }
+
+  document.removeEventListener('mousemove', handleInspectMouseMove, true);
+  document.removeEventListener('click', handleInspectClick, true);
+  document.removeEventListener('keydown', handleInspectKeyDown, true);
+}
+
+function handleInspectKeyDown(e) {
+  if (e.key === 'Escape') {
+    stopInspectMode();
+    chrome.runtime.sendMessage({ type: 'INSPECT_MODE_STATE_CHANGED', enabled: false }).catch(() => {});
+  }
+}
+
+function isDrishtiInternalNode(node) {
+  if (!node || node === document.body || node === document.documentElement) return true;
+  return !!(node.closest && node.closest('#drishti-lens-hud-banner, #drishti-lens-reticle, #drishti-lens-action-menu'));
+}
+
+function handleInspectMouseMove(e) {
+  if (!isInspectModeActive) return;
+  const target = document.elementFromPoint(e.clientX, e.clientY);
+  if (!target || isDrishtiInternalNode(target)) return;
+
+  currentHoveredElement = target;
+  updateReticlePosition(target);
+}
+
+function updateReticlePosition(el) {
+  if (!lensReticleElement || !el) return;
+  const rect = el.getBoundingClientRect();
+  const scrollX = window.scrollX || window.pageXOffset;
+  const scrollY = window.scrollY || window.pageYOffset;
+
+  lensReticleElement.style.display = 'block';
+  lensReticleElement.style.top = `${scrollY + rect.top}px`;
+  lensReticleElement.style.left = `${scrollX + rect.left}px`;
+  lensReticleElement.style.width = `${rect.width}px`;
+  lensReticleElement.style.height = `${rect.height}px`;
+
+  const tagBadge = lensReticleElement.querySelector('.drishti-lens-badge-tag');
+  const textBadge = lensReticleElement.querySelector('.drishti-lens-badge-text');
+
+  if (tagBadge) tagBadge.textContent = `<${el.tagName.toLowerCase()}>`;
+  if (textBadge) {
+    let preview = (el.innerText || el.textContent || el.getAttribute('aria-label') || el.value || '').trim();
+    if (preview.length > 35) preview = preview.slice(0, 35) + '…';
+    textBadge.textContent = preview ? `"${preview}"` : (el.id ? `#${el.id}` : el.className ? `.${el.className.split(' ')[0]}` : '');
+  }
+}
+
+function handleInspectClick(e) {
+  if (!isInspectModeActive) return;
+  const target = document.elementFromPoint(e.clientX, e.clientY);
+  if (!target || isDrishtiInternalNode(target)) return;
+
+  e.preventDefault();
+  e.stopPropagation();
+
+  showLensActionMenu(target);
+}
+
+function showLensActionMenu(el) {
+  if (lensActionMenuElement) {
+    lensActionMenuElement.remove();
+  }
+
+  const rect = el.getBoundingClientRect();
+  const scrollX = window.scrollX || window.pageXOffset;
+  const scrollY = window.scrollY || window.pageYOffset;
+
+  // Extract raw text and sanitize it via processPII
+  const rawText = (el.innerText || el.textContent || el.value || el.getAttribute('aria-label') || '').trim();
+  const sanitized = typeof processPII === 'function' ? processPII(rawText, currentFirewallConfig) : { redactedText: rawText };
+  const cleanText = sanitized.redactedText || rawText;
+
+  lensActionMenuElement = document.createElement('div');
+  lensActionMenuElement.id = 'drishti-lens-action-menu';
+
+  const menuHeight = 90;
+  const topPos = rect.top > menuHeight + 15
+    ? scrollY + rect.top - menuHeight - 10
+    : scrollY + rect.bottom + 10;
+  const leftPos = Math.max(10, Math.min(scrollX + rect.left, window.innerWidth - 340));
+
+  lensActionMenuElement.style.top = `${topPos}px`;
+  lensActionMenuElement.style.left = `${leftPos}px`;
+
+  const previewSnippet = cleanText.length > 50 ? cleanText.slice(0, 50) + '…' : (cleanText || 'Selected Element');
+
+  lensActionMenuElement.innerHTML = `
+    <div class="drishti-menu-header">
+      <div class="drishti-menu-target-info">
+        <span class="drishti-menu-tag">&lt;${el.tagName.toLowerCase()}&gt;</span>
+        <span class="drishti-menu-snippet" title="${cleanText}">"${previewSnippet}"</span>
+      </div>
+      <button class="drishti-menu-close" id="drishti-menu-close-btn" title="Cancel">✕</button>
+    </div>
+    <div class="drishti-menu-actions">
+      <button class="drishti-btn-action drishti-btn-summarize" id="drishti-action-summarize">
+        <span class="drishti-btn-icon">📝</span>
+        <span class="drishti-btn-text">Summarize</span>
+      </button>
+      <button class="drishti-btn-action drishti-btn-search" id="drishti-action-search">
+        <span class="drishti-btn-icon">🔍</span>
+        <span class="drishti-btn-text">Search Web</span>
+      </button>
+    </div>
+  `;
+
+  document.body.appendChild(lensActionMenuElement);
+
+  // Bind Summarize Action
+  const summarizeBtn = lensActionMenuElement.querySelector('#drishti-action-summarize');
+  if (summarizeBtn) {
+    summarizeBtn.addEventListener('click', (e) => {
+      e.stopPropagation();
+      const prompt = `Summarize the content of the selected <${el.tagName.toLowerCase()}> element:\n\n"${cleanText}"`;
+      triggerElementAction('SUMMARIZE', el, cleanText, prompt);
+    });
+  }
+
+  // Bind Search Action
+  const searchBtn = lensActionMenuElement.querySelector('#drishti-action-search');
+  if (searchBtn) {
+    searchBtn.addEventListener('click', (e) => {
+      e.stopPropagation();
+      let query = cleanText.replace(/\n+/g, ' ').trim();
+      if (query.length > 100) query = query.slice(0, 100);
+      const prompt = `Search Google for "${query}" and summarize the findings.`;
+      triggerElementAction('SEARCH', el, cleanText, prompt);
+    });
+  }
+
+  // Bind Close Action
+  const closeBtn = lensActionMenuElement.querySelector('#drishti-menu-close-btn');
+  if (closeBtn) {
+    closeBtn.addEventListener('click', (e) => {
+      e.stopPropagation();
+      if (lensActionMenuElement) {
+        lensActionMenuElement.remove();
+        lensActionMenuElement = null;
+      }
+    });
+  }
+}
+
+function triggerElementAction(actionType, el, text, prompt) {
+  const targetId = el.getAttribute('data-drishti-id') || el.id || '';
+  
+  // Highlight with visual burst
+  highlightElement(el, `${actionType}: ${prompt.slice(0, 25)}…`, false);
+
+  // Send trigger to extension sidebar
+  chrome.runtime.sendMessage({
+    type: 'TRIGGER_INSPECT_ACTION',
+    actionType,
+    targetId,
+    tagName: el.tagName,
+    elementText: text,
+    prompt: prompt
+  }).catch((err) => console.warn('Trigger inspect action message warning:', err));
+
+  // Exit inspect mode cleanly
+  stopInspectMode();
+  chrome.runtime.sendMessage({ type: 'INSPECT_MODE_STATE_CHANGED', enabled: false }).catch(() => {});
+}
+
 // Node.js environment export for automated testing
 if (typeof module !== 'undefined' && module.exports) {
   module.exports = {
@@ -1076,7 +1557,9 @@ if (typeof module !== 'undefined' && module.exports) {
     setNativeInputValue,
     simulateClick,
     isHighRiskAction,
-    HIGH_RISK_KEYWORDS
+    HIGH_RISK_KEYWORDS,
+    startInspectMode,
+    stopInspectMode
   };
 }
 

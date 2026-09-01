@@ -319,6 +319,54 @@ a:hover {
   color: var(--text-white);
 }
 
+.icon-btn-header.btn-lens.active {
+  background: rgba(99, 102, 241, 0.25);
+  color: #818cf8;
+  border: 1px solid rgba(99, 102, 241, 0.5);
+  box-shadow: 0 0 10px rgba(99, 102, 241, 0.4);
+  animation: pulse-lens 1.8s infinite ease-in-out;
+}
+
+.composer-lens-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  padding: 3px 8px;
+  border-radius: var(--radius-xs);
+  background: rgba(255, 255, 255, 0.05);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  color: var(--text-secondary);
+  font-size: 11px;
+  font-weight: 500;
+  transition: all 0.15s ease;
+  cursor: pointer;
+}
+
+.composer-lens-btn:hover {
+  background: rgba(99, 102, 241, 0.15);
+  color: #a5b4fc;
+  border-color: rgba(99, 102, 241, 0.4);
+}
+
+.composer-lens-btn.active {
+  background: rgba(99, 102, 241, 0.25);
+  color: #c7d2fe;
+  border-color: #6366f1;
+  box-shadow: 0 0 8px rgba(99, 102, 241, 0.35);
+  animation: pulse-lens 1.8s infinite ease-in-out;
+}
+
+@keyframes pulse-lens {
+  0%, 100% {
+    box-shadow: 0 0 6px rgba(99, 102, 241, 0.3);
+    border-color: rgba(99, 102, 241, 0.5);
+  }
+  50% {
+    box-shadow: 0 0 14px rgba(99, 102, 241, 0.6);
+    border-color: #818cf8;
+  }
+}
+
 /* ==========================================================================
    2. Page Context Bar
    ========================================================================== */

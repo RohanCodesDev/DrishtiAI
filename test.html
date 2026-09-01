@@ -471,6 +471,76 @@
 
     </div>
 
+    <!-- SECTION 5: INTERACTIVE "CLICK-TO-INSPECT" WEB LENS -->
+    <h2 class="section-title">🔍 5. Interactive "Click-to-Inspect" Web Lens Testing</h2>
+    <div class="grid">
+        
+        <!-- Web Lens Card 1: Article Snippet (Summarize Target) -->
+        <div class="card" style="border-top: 4px solid #6366f1;">
+            <div class="card-header">
+                <span class="badge" style="background: #e0e7ff; color: #4338ca;">LENS TARGET: ARTICLE</span>
+                <h3 class="card-title">Autonomous Web Agents in 2026</h3>
+                <p class="card-desc">Click the Lens button in sidebar, then click this article card to test <b>[ 📝 Summarize ]</b>.</p>
+            </div>
+            <div style="background: #f8fafc; border: 1px solid #e2e8f0; border-radius: 8px; padding: 14px; margin-top: 10px; font-size: 0.9rem; line-height: 1.6; color: #334155;">
+                <p><strong>Next-Gen Browser Automation:</strong> In 2026, browser automation agents shifted from cloud-bound DOM dumpers to on-device privacy-first engines. By executing computer vision, Tesseract OCR, and privacy redaction locally via WebAssembly, modern enterprise agents achieve zero-leak data protection while utilizing state-of-the-art reasoning graphs.</p>
+            </div>
+        </div>
+
+        <!-- Web Lens Card 2: Research Term (Search Target) -->
+        <div class="card" style="border-top: 4px solid #10b981;">
+            <div class="card-header">
+                <span class="badge" style="background: #d1fae5; color: #065f46;">LENS TARGET: TOPIC SEARCH</span>
+                <h3 class="card-title">Quantum Computing WebAssembly</h3>
+                <p class="card-desc">Click the Lens button, then click this term card to test <b>[ 🔍 Search Web ]</b>.</p>
+            </div>
+            <div style="background: #f0fdf4; border: 1px solid #bbf7d0; border-radius: 8px; padding: 14px; margin-top: 10px; font-size: 0.9rem; color: #166534;">
+                <p><strong>Topic Query:</strong> <em>"WebAssembly SIMD Hardware Acceleration for On-Device Machine Learning"</em></p>
+                <p style="font-size: 0.82rem; color: #15803d; margin-top: 6px;">Clicking Search Web will automatically navigate to Google Search and synthesize top findings.</p>
+            </div>
+        </div>
+
+        <!-- Web Lens Card 3: Metrics Table -->
+        <div class="card" style="grid-column: 1 / -1; border-top: 4px solid #8b5cf6;">
+            <div class="card-header">
+                <span class="badge" style="background: #ede9fe; color: #6d28d9;">LENS TARGET: DATA TABLE</span>
+                <h3 class="card-title">DrishtiAI Benchmark Performance Table</h3>
+                <p class="card-desc">Select this table with the Web Lens to test structured element summarization.</p>
+            </div>
+            <table style="width: 100%; border-collapse: collapse; margin-top: 12px; font-size: 0.88rem; text-align: left;">
+                <thead>
+                    <tr style="background: #f1f5f9; border-bottom: 2px solid #cbd5e1;">
+                        <th style="padding: 10px; color: #334155;">Component</th>
+                        <th style="padding: 10px; color: #334155;">Latency</th>
+                        <th style="padding: 10px; color: #334155;">Privacy Guarantee</th>
+                        <th style="padding: 10px; color: #334155;">Execution Environment</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    <tr style="border-bottom: 1px solid #e2e8f0;">
+                        <td style="padding: 10px; font-weight: 600;">Privacy Firewall (11 PII Rules)</td>
+                        <td style="padding: 10px; color: #059669; font-weight: 600;">&lt; 2 ms</td>
+                        <td style="padding: 10px;">100% Client-side Masking</td>
+                        <td style="padding: 10px;">Content Script (Memory)</td>
+                    </tr>
+                    <tr style="border-bottom: 1px solid #e2e8f0;">
+                        <td style="padding: 10px; font-weight: 600;">Tesseract WASM Vision OCR</td>
+                        <td style="padding: 10px; color: #059669; font-weight: 600;">180 ms</td>
+                        <td style="padding: 10px;">Local WASM Sandbox</td>
+                        <td style="padding: 10px;">Offscreen Document</td>
+                    </tr>
+                    <tr style="border-bottom: 1px solid #e2e8f0;">
+                        <td style="padding: 10px; font-weight: 600;">Local Face Redaction Shield</td>
+                        <td style="padding: 10px; color: #059669; font-weight: 600;">18 ms</td>
+                        <td style="padding: 10px;">Irreversible Blackout Mask</td>
+                        <td style="padding: 10px;">Hardware FaceDetector API</td>
+                    </tr>
+                </tbody>
+            </table>
+        </div>
+
+    </div>
+
     <!-- Live Execution Alert Log -->
     <div id="execution-log" style="display: none; margin-bottom: 36px; padding: 16px 20px; background: #ecfdf5; border: 2px solid #10b981; border-radius: 8px; color: #065f46; font-size: 0.95rem; font-weight: 600; text-align: center;">
         <span id="execution-log-text"></span>

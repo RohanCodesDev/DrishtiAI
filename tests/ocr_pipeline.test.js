@@ -14,7 +14,9 @@ const {
   DEFAULT_FIREWALL_CONFIG,
   isHighRiskAction,
   setNativeInputValue,
-  HIGH_RISK_KEYWORDS
+  HIGH_RISK_KEYWORDS,
+  startInspectMode,
+  stopInspectMode
 } = require('../extension/content.js');
 
 // Import prompt builder from backend/prompts.js
@@ -356,6 +358,38 @@ test('Human-in-the-Loop gate pauses high-risk actions without explicit approval'
   assert.strictEqual(approvedRes.approved, true);
 });
 
+// ============================================================================
+// GROUP 6: Interactive Web Lens & Element Action Prompts
+// ============================================================================
+console.log('\n--- Group 6: Interactive Web Lens & Element Action Prompts ---');
+
+test('Web Lens exports toggle methods startInspectMode and stopInspectMode', () => {
+  assert.strictEqual(typeof startInspectMode, 'function');
+  assert.strictEqual(typeof stopInspectMode, 'function');
+});
+
+test('Web Lens creates sanitized Summarize prompt redacting PII from selected element', () => {
+  const selectedElementText = 'Executive Report: Contact CFO at john.doe@securecorp.com regarding card 4532-0150-1234-5678.';
+  const sanitized = processPII(selectedElementText, DEFAULT_FIREWALL_CONFIG);
+  
+  assert.strictEqual(sanitized.redactedText.includes('john.doe@securecorp.com'), false);
+  assert.strictEqual(sanitized.redactedText.includes('[EMAIL_REDACTED]'), true);
+  assert.strictEqual(sanitized.redactedText.includes('4532-0150-1234-5678'), false);
+  assert.strictEqual(sanitized.redactedText.includes('[CREDIT_CARD_REDACTED]'), true);
+
+  const prompt = `Summarize the content of the selected <DIV> element:\n\n"${sanitized.redactedText}"`;
+  assert.strictEqual(prompt.includes('Summarize the content'), true);
+  assert.strictEqual(prompt.includes('[EMAIL_REDACTED]'), true);
+});
+
+test('Web Lens creates Search Google prompt from selected element keyword', () => {
+  const keyword = 'WebAssembly SIMD Hardware Acceleration';
+  const prompt = `Search Google for "${keyword}" and summarize the top findings.`;
+  
+  assert.strictEqual(prompt.includes('Search Google for "WebAssembly SIMD Hardware Acceleration"'), true);
+  assert.strictEqual(prompt.includes('summarize the top findings'), true);
+});
+
 // SUMMARY
 console.log(`\n========================================`);
 console.log(`Tests Completed: ${passedTests} / ${totalTests} Passed`);
@@ -364,6 +398,6 @@ console.log(`========================================\n`);
 if (passedTests !== totalTests) {
   process.exit(1);
 } else {
-  console.log('🎉 All Phase 10 OCR & Action Safety tests passed successfully!');
+  console.log('🎉 All Phase 11 Web Lens & Action Safety tests passed successfully!');
 }
 

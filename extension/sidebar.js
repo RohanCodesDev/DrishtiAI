@@ -19,6 +19,7 @@
   const newChatBtn = document.getElementById('new-chat-btn');
   const refreshBtn = document.getElementById('refresh-btn');
   const settingsToggleBtn = document.getElementById('settings-toggle-btn');
+  const inspectLensBtn = document.getElementById('inspect-lens-btn');
 
   // Context Bar
   const pageDomain = document.getElementById('page-domain');
@@ -29,6 +30,7 @@
   // Composer
   const taskInput = document.getElementById('task-input');
   const autoLoopCb = document.getElementById('auto-loop-cb');
+  const composerInspectBtn = document.getElementById('composer-inspect-btn');
   const runAgentBtn = document.getElementById('run-agent-btn');
   const stopAgentBtn = document.getElementById('stop-agent-btn');
   const quickChips = document.querySelectorAll('.quick-chip');
@@ -1384,10 +1386,14 @@
             if (ai.action === 'NEW_TAB' && success && feedback?.tabId) {
               UI_STATE.boundTabId = feedback.tabId;
               UI_STATE.currentTurn.statusMessage = `Opened new tab at ${feedback.navigatedTo || ai.value}. Inspecting fresh page…`;
+              await cancellableDelay(400);
               await loadBoundTabDOM();
+              break; // Stop executing remaining actions from the old page batch
             } else if (ai.action === 'NAVIGATE' && success) {
               UI_STATE.currentTurn.statusMessage = `Navigated to ${feedback?.navigatedTo || ai.value}. Inspecting fresh page…`;
+              await cancellableDelay(400);
               await loadBoundTabDOM();
+              break; // Stop executing remaining actions from the old page batch
             } else if (ai.action === 'SCROLL' && success) {
               await cancellableDelay(150);
               await loadBoundTabDOM();
@@ -1505,10 +1511,14 @@
     if (pending.action.action === 'NEW_TAB' && success && feedback?.tabId) {
       UI_STATE.boundTabId = feedback.tabId;
       turn.statusMessage = `Opened new tab at ${feedback.navigatedTo || pending.action.value}. Inspecting fresh page…`;
+      await cancellableDelay(400);
       await loadBoundTabDOM();
+      pending.remainingActions = [];
     } else if (pending.action.action === 'NAVIGATE' && success) {
       turn.statusMessage = `Navigated to ${feedback?.navigatedTo || pending.action.value}. Inspecting fresh page…`;
+      await cancellableDelay(400);
       await loadBoundTabDOM();
+      pending.remainingActions = [];
     } else if (pending.action.action === 'SCROLL' && success) {
       await cancellableDelay(150);
       await loadBoundTabDOM();
@@ -1592,10 +1602,14 @@
           if (nextAi.action === 'NEW_TAB' && nextSuccess && nextFeedback?.tabId) {
             UI_STATE.boundTabId = nextFeedback.tabId;
             turn.statusMessage = `Opened new tab at ${nextFeedback.navigatedTo || nextAi.value}. Inspecting fresh page…`;
+            await cancellableDelay(400);
             await loadBoundTabDOM();
+            break;
           } else if (nextAi.action === 'NAVIGATE' && nextSuccess) {
             turn.statusMessage = `Navigated to ${nextFeedback?.navigatedTo || nextAi.value}. Inspecting fresh page…`;
+            await cancellableDelay(400);
             await loadBoundTabDOM();
+            break;
           } else if (nextAi.action === 'SCROLL' && nextSuccess) {
             await cancellableDelay(150);
             await loadBoundTabDOM();
@@ -1712,9 +1726,46 @@
   }
 
   // ==========================================================================
+  // Web Lens Inspect Mode Controller
+  // ==========================================================================
+  let isInspectModeEnabled = false;
+
+  async function setInspectModeState(enabled) {
+    isInspectModeEnabled = !!enabled;
+    if (inspectLensBtn) {
+      if (isInspectModeEnabled) inspectLensBtn.classList.add('active');
+      else inspectLensBtn.classList.remove('active');
+    }
+    if (composerInspectBtn) {
+      if (isInspectModeEnabled) composerInspectBtn.classList.add('active');
+      else composerInspectBtn.classList.remove('active');
+    }
+
+    const tabId = await getTargetTabId();
+    if (tabId) {
+      chrome.tabs.sendMessage(tabId, {
+        type: 'TOGGLE_INSPECT_MODE',
+        enabled: isInspectModeEnabled
+      }, () => {
+        if (chrome.runtime.lastError) {
+          // tab might need injection or is restricted
+        }
+      });
+    }
+  }
+
+  function toggleInspectMode() {
+    setInspectModeState(!isInspectModeEnabled);
+  }
+
+  // ==========================================================================
   // Event Listeners Setup
   // ==========================================================================
   function initEvents() {
+    // Web Lens Inspect button triggers
+    if (inspectLensBtn) inspectLensBtn.addEventListener('click', toggleInspectMode);
+    if (composerInspectBtn) composerInspectBtn.addEventListener('click', toggleInspectMode);
+
     // Drawer open / close
     if (settingsToggleBtn) settingsToggleBtn.addEventListener('click', toggleSettingsPane);
     if (closeSettingsBtn) closeSettingsBtn.addEventListener('click', closeSettingsPane);
@@ -1923,6 +1974,38 @@
           UI_STATE.firewallConfig = normalizeConfig(newStored);
           renderConfigUI();
           loadBoundTabDOM();
+        }
+      });
+    }
+    // Runtime message listener for Web Lens page triggers
+    if (typeof chrome !== 'undefined' && chrome.runtime && chrome.runtime.onMessage) {
+      chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
+        if (!message) return;
+
+        if (message.type === 'TRIGGER_INSPECT_ACTION') {
+          console.log('DrishtiAI: Received Web Lens action from page:', message);
+          if (taskInput) {
+            taskInput.value = message.prompt;
+            adjustTextareaHeight();
+          }
+          setInspectModeState(false);
+          startAgentRun(message.prompt);
+          sendResponse({ success: true });
+          return true;
+        }
+
+        if (message.type === 'INSPECT_MODE_STATE_CHANGED') {
+          isInspectModeEnabled = !!message.enabled;
+          if (inspectLensBtn) {
+            if (isInspectModeEnabled) inspectLensBtn.classList.add('active');
+            else inspectLensBtn.classList.remove('active');
+          }
+          if (composerInspectBtn) {
+            if (isInspectModeEnabled) composerInspectBtn.classList.add('active');
+            else composerInspectBtn.classList.remove('active');
+          }
+          sendResponse({ success: true });
+          return true;
         }
       });
     }
