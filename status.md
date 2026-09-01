@@ -6,7 +6,8 @@
 
 ### What We Can Do Now (Current Capabilities)
 * **Manifest V3 Chrome Extension**: Tab-bound persistent side panel with real-time UI, Tabler Icons, DevTools debugging, and active-tab tracking.
-* **10 Built-In Local PII Detectors**: Detect and redact Emails, Phone Numbers (US & International & Indian Mobile), Credit/Debit Cards (with Luhn check), Social Security Numbers (SSN), Indian Aadhaar Numbers, Indian PAN Cards, API Keys & JWT Secrets, IP Addresses (IPv4/IPv6), Crypto Wallets (ETH/BTC), and Passport Numbers on-device before any transmission.
+* **11 Built-In Local PII & Biometric Detectors**: Detect and redact Emails, Phone Numbers (US & International & Indian Mobile), Credit/Debit Cards (with Luhn check), Social Security Numbers (SSN), Indian Aadhaar Numbers, Indian PAN Cards, API Keys & JWT Secrets, IP Addresses (IPv4/IPv6), Crypto Wallets (ETH/BTC), Passport Numbers, and **Human Faces & Biometric Data** on-device before any transmission.
+* **On-Device Human Face Detection & Visual Blackout Redaction**: Offscreen vision engine uses Chrome's native hardware-accelerated `FaceDetector` Web API combined with pixel chromaticity contour heuristics to detect facial regions on viewport screenshots and canvas graphics, overlaying solid privacy blackout shields (`👤 [FACE REDACTED]`) locally so zero facial imagery is ever transmitted to cloud AI.
 * **Custom Blacklist & Whitelist**: Real-time keyword/regex blacklists (always masked as `[BLACKLIST_REDACTED]`) and whitelist tokens (preserved from redaction).
 * **Real-Time Reactive Settings Pane**: Dedicated slide-over settings drawer in the sidebar allowing instant rule toggling, blacklist/whitelist additions/removals, preset controls, and instantaneous JSON DOM updates without page reloads.
 * **Stateful LangGraph Agent Orchestration**: Stateful LangGraph (`OBSERVE` -> `REASON` -> `VALIDATE`) reasoning and execution graph in Node.js backend.
