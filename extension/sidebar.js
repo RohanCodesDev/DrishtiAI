@@ -960,6 +960,37 @@
         `;
       }
 
+      // Human-in-the-Loop High-Risk Action Confirmation Card
+      if (turn.pendingApproval) {
+        const pa = turn.pendingApproval;
+        bodyHtml += `
+          <div class="approval-card" data-turn-idx="${turnIdx}">
+            <div class="approval-header">
+              <span class="approval-badge">
+                <i class="ti ti-shield-lock"></i>
+                <span>Human Approval Required</span>
+              </span>
+            </div>
+            <div class="approval-action-title">
+              <strong>${escapeHtml(pa.action.action)}:</strong> "${escapeHtml(pa.targetText || 'Target Element')}"
+            </div>
+            <p class="approval-desc">
+              ${escapeHtml(pa.reason || 'This action targets a sensitive or destructive page element (e.g. account deletion, financial transfer, or security credential change).')}
+            </p>
+            <div class="approval-btn-row">
+              <button type="button" class="btn-approve" data-turn-idx="${turnIdx}">
+                <i class="ti ti-check"></i>
+                <span>Approve &amp; Execute</span>
+              </button>
+              <button type="button" class="btn-reject" data-turn-idx="${turnIdx}">
+                <i class="ti ti-x"></i>
+                <span>Reject / Abort</span>
+              </button>
+            </div>
+          </div>
+        `;
+      }
+
       // Status Banners (Stopped / Error)
       if (turn.status === 'stopped') {
         bodyHtml += `
@@ -988,6 +1019,23 @@
 
       turnEl.appendChild(agentRow);
       chatMessages.appendChild(turnEl);
+
+      // Attach Approval and Reject handlers for Human-in-the-Loop
+      const approveBtn = turnEl.querySelector('.btn-approve');
+      if (approveBtn) {
+        approveBtn.addEventListener('click', (e) => {
+          e.stopPropagation();
+          approvePendingAction(turnIdx);
+        });
+      }
+
+      const rejectBtn = turnEl.querySelector('.btn-reject');
+      if (rejectBtn) {
+        rejectBtn.addEventListener('click', (e) => {
+          e.stopPropagation();
+          rejectPendingAction(turnIdx);
+        });
+      }
 
       // Attach accordion toggle listeners
       const accordionEl = turnEl.querySelector('.agent-bubble-steps');
@@ -1292,6 +1340,26 @@
               }, (res) => resolve(res));
             });
 
+            // Human-in-the-Loop (HITL) Safety Pause: Intercept high-risk action requiring approval
+            if (feedback && feedback.requires_approval) {
+              UI_STATE.currentTurn.steps[stepIndex].status = 'running';
+              UI_STATE.currentTurn.steps[stepIndex].detail = '⚠️ Paused — Human approval required';
+              UI_STATE.currentTurn.status = 'running';
+              UI_STATE.currentTurn.statusMessage = '⚠️ Awaiting Human Approval for High-Risk Action';
+              UI_STATE.currentTurn.pendingApproval = {
+                action: ai,
+                stepIndex: stepIndex,
+                loopCount: loopCount,
+                actionHistory: actionHistory,
+                targetText: feedback.target_text || stepInfo.label,
+                reason: ai.reason || 'This action targets a sensitive or destructive element.',
+                remainingActions: rawActions.slice(i + 1)
+              };
+              updateAgentStatus('WAITING', '⚠️ Awaiting Approval');
+              renderAllChatHistory();
+              return; // Pause auto-loop and wait for user decision
+            }
+
             const success = feedback && feedback.success;
             UI_STATE.currentTurn.steps[stepIndex].status = success ? 'completed' : 'failed';
             if (!success && feedback?.error) {
@@ -1384,6 +1452,180 @@
       saveChatHistory();
       setAgentRunningState(false);
     }
+  }
+
+  // ==========================================================================
+  // Human-in-the-Loop (HITL) Action Confirmation Handlers
+  // ==========================================================================
+  async function approvePendingAction(turnIdx) {
+    const turn = UI_STATE.chatHistory[turnIdx];
+    if (!turn || !turn.pendingApproval) return;
+    const pending = turn.pendingApproval;
+    turn.pendingApproval = null;
+
+    updateAgentStatus('RUNNING', 'Executing approved action...');
+    turn.status = 'running';
+    turn.statusMessage = `Executing approved ${pending.action.action}…`;
+    renderAllChatHistory();
+
+    const feedback = await new Promise((resolve) => {
+      chrome.runtime.sendMessage({
+        type: 'EXECUTE_ACTION',
+        tabId: UI_STATE.boundTabId,
+        action: pending.action,
+        approved: true
+      }, (res) => resolve(res));
+    });
+
+    const success = feedback && feedback.success;
+    if (turn.steps[pending.stepIndex]) {
+      turn.steps[pending.stepIndex].status = success ? 'completed' : 'failed';
+      turn.steps[pending.stepIndex].detail = success ? '✅ Approved by User & Executed' : `Failed: ${feedback?.error || 'Unknown error'}`;
+    }
+
+    const execRes = success ? 'SUCCESS (USER_APPROVED)' : ('FAILED: ' + (feedback?.error || 'Unknown'));
+    pending.actionHistory.push({ action: pending.action.action, target: pending.action.target_id, value: pending.action.value, execution_result: execRes });
+
+    if (pending.action.action === 'NAVIGATE' && success) {
+      turn.statusMessage = `Navigated to ${pending.action.value}. Inspecting fresh page…`;
+      await loadBoundTabDOM();
+    } else if (pending.action.action === 'SCROLL' && success) {
+      await cancellableDelay(150);
+      await loadBoundTabDOM();
+    }
+
+    await cancellableDelay(100);
+
+    // If remaining actions in this batch exist, continue executing them
+    if (Array.isArray(pending.remainingActions) && pending.remainingActions.length > 0) {
+      for (let j = 0; j < pending.remainingActions.length; j++) {
+        if (!UI_STATE.isAgentRunning) break;
+        const nextAi = pending.remainingActions[j];
+        const nextStepInfo = toUserFacingStep(nextAi, UI_STATE.currentDomData);
+        
+        if (nextAi.action === 'REPLY') {
+          turn.finalAnswer = nextAi.value || 'Done.';
+          turn.status = 'completed';
+          turn.statusMessage = 'Done';
+          pending.actionHistory.push({ action: nextAi.action, target: 'USER', value: nextAi.value, execution_result: 'SUCCESS' });
+          break;
+        } else if (nextAi.action === 'DONE') {
+          if (!turn.finalAnswer) {
+            turn.finalAnswer = nextAi.value || 'Objective successfully completed.';
+          }
+          turn.status = 'completed';
+          turn.statusMessage = 'Done';
+          break;
+        }
+
+        const nextStepIndex = turn.steps.length;
+        turn.steps.push({
+          type: nextAi.action,
+          label: nextStepInfo.label,
+          detail: nextStepInfo.detail,
+          status: 'running'
+        });
+        turn.statusMessage = `${nextStepInfo.label}…`;
+        renderAllChatHistory();
+
+        if (nextAi.action === 'WAIT') {
+          await cancellableDelay(2000);
+          turn.steps[nextStepIndex].status = 'completed';
+          pending.actionHistory.push({ action: nextAi.action, target: 'N/A', value: '2000ms', execution_result: 'SUCCESS' });
+        } else {
+          const nextFeedback = await new Promise((resolve) => {
+            chrome.runtime.sendMessage({
+              type: 'EXECUTE_ACTION',
+              tabId: UI_STATE.boundTabId,
+              action: nextAi
+            }, (res) => resolve(res));
+          });
+
+          if (nextFeedback && nextFeedback.requires_approval) {
+            turn.steps[nextStepIndex].status = 'running';
+            turn.steps[nextStepIndex].detail = '⚠️ Paused — Human approval required';
+            turn.status = 'running';
+            turn.statusMessage = '⚠️ Awaiting Human Approval for High-Risk Action';
+            turn.pendingApproval = {
+              action: nextAi,
+              stepIndex: nextStepIndex,
+              loopCount: pending.loopCount,
+              actionHistory: pending.actionHistory,
+              targetText: nextFeedback.target_text || nextStepInfo.label,
+              reason: nextAi.reason || 'This action targets a sensitive or destructive element.',
+              remainingActions: pending.remainingActions.slice(j + 1)
+            };
+            updateAgentStatus('WAITING', '⚠️ Awaiting Approval');
+            renderAllChatHistory();
+            return;
+          }
+
+          const nextSuccess = nextFeedback && nextFeedback.success;
+          turn.steps[nextStepIndex].status = nextSuccess ? 'completed' : 'failed';
+          if (!nextSuccess && nextFeedback?.error) {
+            turn.steps[nextStepIndex].detail = `Failed: ${nextFeedback.error}`;
+          }
+
+          const nextExecRes = nextSuccess ? 'SUCCESS' : ('FAILED: ' + (nextFeedback?.error || 'Unknown'));
+          pending.actionHistory.push({ action: nextAi.action, target: nextAi.target_id, value: nextAi.value, execution_result: nextExecRes });
+
+          if (nextAi.action === 'NAVIGATE' && nextSuccess) {
+            turn.statusMessage = `Navigated to ${nextAi.value}. Inspecting fresh page…`;
+            await loadBoundTabDOM();
+          } else if (nextAi.action === 'SCROLL' && nextSuccess) {
+            await cancellableDelay(150);
+            await loadBoundTabDOM();
+          }
+
+          await cancellableDelay(100);
+        }
+        renderAllChatHistory();
+      }
+    }
+
+    if (autoLoopCb && autoLoopCb.checked && UI_STATE.isAgentRunning && turn.status === 'running') {
+      turn.statusMessage = 'Analyzing next step…';
+      renderAllChatHistory();
+      pendingLoopTimer = setTimeout(async () => {
+        pendingLoopTimer = null;
+        if (!UI_STATE.isAgentRunning) return;
+        await loadBoundTabDOM();
+        if (!UI_STATE.isAgentRunning) return;
+        executeAgentStep(pending.loopCount + 1, pending.actionHistory);
+      }, 1200);
+    } else {
+      turn.status = 'completed';
+      if (!turn.finalAnswer) {
+        turn.finalAnswer = 'Action successfully approved and executed.';
+      }
+      updateAgentStatus('READY', 'Ready');
+      setAgentRunningState(false);
+      renderAllChatHistory();
+      saveChatHistory();
+    }
+  }
+
+  async function rejectPendingAction(turnIdx) {
+    const turn = UI_STATE.chatHistory[turnIdx];
+    if (!turn || !turn.pendingApproval) return;
+    const pending = turn.pendingApproval;
+    turn.pendingApproval = null;
+
+    if (turn.steps[pending.stepIndex]) {
+      turn.steps[pending.stepIndex].status = 'failed';
+      turn.steps[pending.stepIndex].detail = 'Cancelled by User Safety Check';
+    }
+
+    pending.actionHistory.push({ action: pending.action.action, target: pending.action.target_id, value: pending.action.value, execution_result: 'REJECTED_BY_USER' });
+
+    turn.status = 'completed';
+    turn.finalAnswer = `High-risk action **${escapeHtml(pending.action.action)}** on "${escapeHtml(pending.targetText || 'target')}" was cancelled by user safety check. No changes were made.`;
+    turn.statusMessage = 'Action cancelled by user';
+
+    updateAgentStatus('READY', 'Ready');
+    setAgentRunningState(false);
+    renderAllChatHistory();
+    saveChatHistory();
   }
 
   // ==========================================================================

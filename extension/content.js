@@ -745,18 +745,38 @@ if (typeof chrome !== 'undefined' && chrome.runtime && chrome.runtime.onMessage 
 
       const highRisk = isHighRiskAction(targetElement, ai);
 
+      // Human-in-the-Loop (HITL) Safety Gate: Refuse execution if sensitive/destructive action is not approved
+      if (highRisk && !message.approved) {
+        if (targetElement) {
+          try {
+            targetElement.scrollIntoView({ behavior: 'smooth', block: 'center' });
+          } catch (e) {}
+          highlightElement(targetElement, `${ai.action} (Approval Required)`, true);
+        }
+        const targetText = targetElement ? (targetElement.textContent?.trim() || targetElement.value || targetElement.getAttribute('aria-label') || targetElement.id || 'Sensitive Target') : 'Sensitive Element';
+        sendResponse({
+          success: false,
+          requires_approval: true,
+          is_high_risk: true,
+          action: ai,
+          target_text: targetText.length > 60 ? targetText.slice(0, 60) + '...' : targetText,
+          message: `Destructive or sensitive action '${ai.action}' requires user approval before execution.`
+        });
+        return true;
+      }
+
       try {
         switch (ai.action) {
           case 'CLICK':
             if (targetElement) {
               simulateClick(targetElement);
-              highlightElement(targetElement, ai.action, highRisk);
+              highlightElement(targetElement, highRisk ? `${ai.action} (Approved)` : ai.action, highRisk);
             }
             break;
           case 'TYPE':
             if (targetElement) {
               setNativeInputValue(targetElement, ai.value || '');
-              highlightElement(targetElement, ai.action, highRisk);
+              highlightElement(targetElement, highRisk ? `${ai.action} (Approved)` : ai.action, highRisk);
             }
             break;
           case 'NAVIGATE':
@@ -811,7 +831,7 @@ if (typeof chrome !== 'undefined' && chrome.runtime && chrome.runtime.onMessage 
             if (targetElement) highlightElement(targetElement, ai.action, highRisk);
             break;
         }
-        sendResponse({ success: true, is_high_risk: highRisk });
+        sendResponse({ success: true, is_high_risk: highRisk, approved: !!message.approved });
       } catch (e) {
         sendResponse({ success: false, error: e.message, is_high_risk: highRisk });
       }

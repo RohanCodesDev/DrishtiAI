@@ -300,6 +300,41 @@ test('Matches select dropdown options by text or value', () => {
   assert.strictEqual(selectMock.selectedIndex, 2);
 });
 
+test('Human-in-the-Loop gate pauses high-risk actions without explicit approval', () => {
+  const purgeBtnMock = {
+    textContent: 'Purge Account Database & Delete All Records',
+    getAttribute: (attr) => attr === 'id' ? 'btn-purge-db' : null
+  };
+  const action = { action: 'CLICK', target_id: 'btn-purge-db' };
+
+  // Simulated content script execution handler logic
+  function handleActionMessage(el, ai, message) {
+    const highRisk = isHighRiskAction(el, ai);
+    if (highRisk && !message.approved) {
+      return {
+        success: false,
+        requires_approval: true,
+        is_high_risk: true,
+        action: ai,
+        target_text: el.textContent,
+        message: 'Requires user approval'
+      };
+    }
+    return { success: true, is_high_risk: highRisk, approved: !!message.approved };
+  }
+
+  // 1. Without approval -> Must return requires_approval = true & success = false
+  const unapprovedRes = handleActionMessage(purgeBtnMock, action, { approved: false });
+  assert.strictEqual(unapprovedRes.requires_approval, true);
+  assert.strictEqual(unapprovedRes.success, false);
+  assert.strictEqual(unapprovedRes.is_high_risk, true);
+
+  // 2. With approval -> Must execute successfully with approved = true
+  const approvedRes = handleActionMessage(purgeBtnMock, action, { approved: true });
+  assert.strictEqual(approvedRes.success, true);
+  assert.strictEqual(approvedRes.approved, true);
+});
+
 // SUMMARY
 console.log(`\n========================================`);
 console.log(`Tests Completed: ${passedTests} / ${totalTests} Passed`);
