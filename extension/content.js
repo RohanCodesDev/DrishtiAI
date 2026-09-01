@@ -13,7 +13,8 @@ const DEFAULT_FIREWALL_CONFIG = {
     api_key: true,
     ip_address: true,
     crypto_wallet: true,
-    passport: true
+    passport: true,
+    face_biometric: true
   },
   custom_blacklist: [],
   custom_whitelist: []
@@ -304,6 +305,15 @@ function processPII(text, config = currentFirewallConfig || DEFAULT_FIREWALL_CON
     if (passportRegex.test(processed)) {
       piiTypes.add('passport');
       processed = processed.replace(passportRegex, '[PASSPORT_REDACTED]');
+    }
+  }
+
+  // 11. Human Face & Biometric Identifiers
+  if (rules.face_biometric) {
+    const biometricRegex = /\b(?:Face\s*ID|Biometric\s*(?:Scan|Data|Profile|Template|Embedding|Capture)|Facial\s*(?:Recognition|Embedding|Biometric|Scan)|Fingerprint\s*ID|Iris\s*Scan|Retina\s*Scan|User\s*Biometric)\b(?:\s*[:=]\s*[A-Za-z0-9+/=_-]{4,})?/gi;
+    if (biometricRegex.test(processed)) {
+      piiTypes.add('face_biometric');
+      processed = processed.replace(biometricRegex, '[BIOMETRIC_REDACTED]');
     }
   }
 

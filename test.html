@@ -381,18 +381,34 @@
         </div>
 
         <!-- Canvas Card 3: Promo Voucher -->
-        <div class="card" style="grid-column: 1 / -1;">
+        <div class="card">
             <div class="card-header">
                 <span class="badge" style="background: #fef3c7; color: #92400e;">TEST: PROMO VOUCHER BANNER</span>
-                <h3 class="card-title">VIP Discount & Voucher Graphic</h3>
-                <p class="card-desc">Promotional banner drawn onto canvas containing special coupon & discount rate.</p>
+                <h3 class="card-title">VIP Discount &amp; Voucher Graphic</h3>
+                <p class="card-desc">Promotional banner drawn onto canvas containing special coupon &amp; discount rate.</p>
             </div>
             <div style="background: #fffbeb; border: 2px dashed #fcd34d; padding: 20px; border-radius: 8px; text-align: center; margin-top: 12px;">
-                <canvas id="voucher-canvas" width="450" height="90"></canvas>
+                <canvas id="voucher-canvas" width="380" height="90"></canvas>
             </div>
             <div style="display: flex; gap: 8px; margin-top: 16px;">
                 <button class="btn btn-secondary" style="flex: 1; font-size: 0.85rem; padding: 8px;" onclick="copyPrompt('What is the voucher discount code and discount percentage?')">📋 Copy Prompt</button>
                 <button class="btn" style="background: #e2e8f0; color: #334155; font-size: 0.85rem; padding: 8px;" onclick="randomizeVoucher()">🎲 Randomize</button>
+            </div>
+        </div>
+
+        <!-- Canvas Card 4: Face Biometrics & Profile Badge -->
+        <div class="card">
+            <div class="card-header">
+                <span class="badge" style="background: #fce7f3; color: #be185d;">TEST: FACE BIOMETRICS &amp; AVATAR</span>
+                <h3 class="card-title">Human Face &amp; Biometric ID Badge</h3>
+                <p class="card-desc">Visual human portrait &amp; Face ID graphic. Verified by local face perception &amp; blackout masking.</p>
+            </div>
+            <div style="background: #fdf2f8; border: 2px dashed #f472b6; padding: 14px; border-radius: 8px; text-align: center; margin-top: 12px;">
+                <canvas id="face-biometric-canvas" width="380" height="110"></canvas>
+            </div>
+            <div style="display: flex; gap: 8px; margin-top: 16px;">
+                <button class="btn btn-secondary" style="flex: 1; font-size: 0.85rem; padding: 8px;" onclick="copyPrompt('Read the user profile badge and verify if face is redacted')">📋 Copy Prompt</button>
+                <button class="btn" style="background: #e2e8f0; color: #334155; font-size: 0.85rem; padding: 8px;" onclick="randomizeFaceBiometric()">🎲 Randomize</button>
             </div>
         </div>
 
@@ -533,13 +549,80 @@
         }
     }
 
+    function drawFaceBiometricCanvas() {
+        const canvas4 = document.getElementById('face-biometric-canvas');
+        if (canvas4) {
+            const ctx4 = canvas4.getContext('2d');
+            ctx4.fillStyle = '#ffffff';
+            ctx4.fillRect(0, 0, canvas4.width, canvas4.height);
+            ctx4.strokeStyle = '#f472b6';
+            ctx4.lineWidth = 2;
+            ctx4.strokeRect(1, 1, canvas4.width - 2, canvas4.height - 2);
+
+            // Draw Face Avatar (Head, Eyes, Nose, Mouth, Hair with standard skin tone)
+            const fx = 48, fy = 55, fr = 32;
+            
+            // Hair
+            ctx4.fillStyle = '#475569';
+            ctx4.beginPath();
+            ctx4.arc(fx, fy - 6, fr + 4, Math.PI, 2 * Math.PI);
+            ctx4.fill();
+
+            // Face Head / Skin
+            ctx4.fillStyle = '#fbcfe8';
+            ctx4.beginPath();
+            ctx4.arc(fx, fy, fr, 0, 2 * Math.PI);
+            ctx4.fill();
+            ctx4.strokeStyle = '#db2777';
+            ctx4.lineWidth = 1.5;
+            ctx4.stroke();
+
+            // Eyes
+            ctx4.fillStyle = '#0f172a';
+            ctx4.beginPath();
+            ctx4.arc(fx - 11, fy - 5, 3.5, 0, 2 * Math.PI);
+            ctx4.arc(fx + 11, fy - 5, 3.5, 0, 2 * Math.PI);
+            ctx4.fill();
+
+            // Smile
+            ctx4.strokeStyle = '#be185d';
+            ctx4.lineWidth = 2;
+            ctx4.beginPath();
+            ctx4.arc(fx, fy + 6, 12, 0.2 * Math.PI, 0.8 * Math.PI);
+            ctx4.stroke();
+
+            // Text Metadata
+            ctx4.fillStyle = '#be185d';
+            ctx4.font = 'bold 15px -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif';
+            ctx4.textAlign = 'left';
+            ctx4.fillText(`USER: ${currentBiometricName}`, 100, 36);
+
+            ctx4.fillStyle = '#475569';
+            ctx4.font = 'bold 13px "Courier New", Courier, monospace';
+            ctx4.fillText(`BIOMETRIC ID: ${currentBiometricId}`, 100, 62);
+
+            ctx4.fillStyle = '#059669';
+            ctx4.font = 'bold 12px sans-serif';
+            ctx4.fillText('STATUS: FACE ID REGISTERED', 100, 88);
+        }
+    }
+
     function drawAllCanvases() {
         drawConfirmationCanvas();
         drawSecurityPinCanvas();
         drawVoucherCanvas();
+        drawFaceBiometricCanvas();
     }
 
     // Dynamic Randomizers for Live Interactive Testing
+    function randomizeFaceBiometric() {
+        const names = ['Alex Mercer', 'Elena Rostova', 'Rohan Sharma', 'Chloe Zhao', 'Marcus Vance'];
+        currentBiometricName = names[Math.floor(Math.random() * names.length)];
+        currentBiometricId = 'BIO-' + Math.floor(100000 + Math.random() * 900000);
+        drawFaceBiometricCanvas();
+        showToast(`New user portrait generated: ${currentBiometricName} (${currentBiometricId})`);
+    }
+
     function randomizeConfirmationCode() {
         const num = Math.floor(1000 + Math.random() * 9000);
         const letters = String.fromCharCode(65 + Math.floor(Math.random() * 26)) + String.fromCharCode(65 + Math.floor(Math.random() * 26));

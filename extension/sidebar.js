@@ -82,7 +82,8 @@
       api_key: true,
       ip_address: true,
       crypto_wallet: true,
-      passport: true
+      passport: true,
+      face_biometric: true
     },
     custom_blacklist: [],
     custom_whitelist: []
@@ -382,12 +383,13 @@
     }
 
     // Status Bar & Pills
+    const totalRulesCount = Object.keys(DEFAULT_FIREWALL_CONFIG.rules).length;
     const activeRulesCount = Object.keys(UI_STATE.firewallConfig.rules).filter(
       (k) => UI_STATE.firewallConfig.rules[k]
     ).length;
 
     if (firewallStatusText) {
-      firewallStatusText.textContent = `Shield Active: ${activeRulesCount} / 10 Rules`;
+      firewallStatusText.textContent = `Shield Active: ${activeRulesCount} / ${totalRulesCount} Rules`;
     }
     if (blCountPill) blCountPill.textContent = `${UI_STATE.firewallConfig.custom_blacklist.length} BL`;
     if (wlCountPill) wlCountPill.textContent = `${UI_STATE.firewallConfig.custom_whitelist.length} WL`;

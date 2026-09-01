@@ -85,6 +85,14 @@ test('Redacts API Keys and Ethereum Crypto Wallets from OCR text', () => {
   assert.ok(res.piiTypes.includes('crypto_wallet'));
 });
 
+test('Redacts Face & Biometric Identifiers from OCR and DOM text', () => {
+  const ocrText = 'User Profile: Face ID: a8f99b102ce4 and Biometric Scan: BIO_990142';
+  const res = processPII(ocrText, DEFAULT_FIREWALL_CONFIG);
+  assert.ok(!res.redactedText.includes('a8f99b102ce4'));
+  assert.ok(res.redactedText.includes('[BIOMETRIC_REDACTED]'));
+  assert.ok(res.piiTypes.includes('face_biometric'));
+});
+
 // TEST GROUP 2: Whitelist & Blacklist on OCR Text
 console.log('\n--- Group 2: Whitelist & Blacklist on Visual OCR Text ---');
 
@@ -207,6 +215,19 @@ test('Truncates overly large visual context to prevent token overflows', () => {
   const prompt = buildUserPrompt(domData, 'Analyze state');
   assert.ok(prompt.includes('[truncated]'));
   assert.ok(prompt.length < 6000);
+});
+
+test('Preserves Face Biometric Privacy token in multimodal prompt context', () => {
+  const domData = {
+    url: 'http://localhost/test.html',
+    title: 'DRISHTI AI — Demo Environment',
+    element_count: 12,
+    root: { id: 'element_0', tag: 'body' },
+    visual_context: '[CANVAS GRAPHIC #face-biometric-canvas]:\nUSER: Alex Mercer\n[BIOMETRIC PRIVACY: 1 Human Face(s) Detected & Redacted Locally]'
+  };
+  const prompt = buildUserPrompt(domData, 'Read user details');
+  assert.ok(prompt.includes('BIOMETRIC PRIVACY: 1 Human Face(s) Detected & Redacted Locally'));
+  assert.ok(prompt.includes('USER: Alex Mercer'));
 });
 
 // TEST GROUP 5: Safe Action Execution & Modern SPA Input Binding

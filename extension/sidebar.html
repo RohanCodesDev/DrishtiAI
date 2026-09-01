@@ -222,7 +222,7 @@
           <div class="firewall-summary-card">
             <div class="summary-card-left">
               <span class="status-shield-dot"></span>
-              <span id="firewall-status-text">Shield Active: 10 / 10 Rules</span>
+              <span id="firewall-status-text">Shield Active: 11 / 11 Rules</span>
             </div>
             <div class="summary-card-pills">
               <span class="tag-pill tag-ocr" id="ocr-count-pill" title="Local Vision OCR Engine">👁️ OCR</span>
@@ -335,6 +335,15 @@
                   <span class="rule-desc">US & International passport IDs</span>
                 </div>
                 <input type="checkbox" class="rule-toggle" data-rule="passport" checked>
+                <span class="toggle-slider"></span>
+              </label>
+
+              <label class="rule-item">
+                <div class="rule-info">
+                  <span class="rule-name">Human Faces & Biometrics</span>
+                  <span class="rule-desc">Detect &amp; mask facial regions &amp; biometric IDs</span>
+                </div>
+                <input type="checkbox" class="rule-toggle" data-rule="face_biometric" checked>
                 <span class="toggle-slider"></span>
               </label>
 
