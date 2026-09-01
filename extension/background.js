@@ -367,14 +367,61 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
 
       const ai = message.action;
 
+      // Helper: Resolve URLs and auto-format web search queries
+      function resolveTargetUrl(rawVal) {
+        let val = (rawVal || '').trim();
+        if (!val) return 'https://www.google.com';
+        if (/^https?:\/\//i.test(val) || val.startsWith('chrome://') || val.startsWith('about:')) {
+          return val;
+        }
+        const isSearch = val.includes(' ') || !val.includes('.') || /^(search|google)\s+/i.test(val);
+        if (isSearch) {
+          const cleanQuery = val.replace(/^(search\s+for|search|google)\s+/i, '').trim();
+          return 'https://www.google.com/search?q=' + encodeURIComponent(cleanQuery || val);
+        }
+        return 'https://' + val;
+      }
+
+      // Handle NEW_TAB via chrome.tabs.create in background worker
+      if (ai && ai.action === 'NEW_TAB') {
+        const targetUrl = resolveTargetUrl(ai.value);
+        try {
+          console.log(`DrishtiAI: Opening new tab at "${targetUrl}"...`);
+          const newTab = await chrome.tabs.create({ url: targetUrl, active: true });
+          const newTabId = newTab.id;
+
+          // Wait for tab navigation to complete loading
+          await new Promise((resolve) => {
+            const navTimeout = setTimeout(() => {
+              chrome.tabs.onUpdated.removeListener(navListener);
+              resolve();
+            }, 7000);
+
+            const navListener = (updatedTabId, changeInfo) => {
+              if (updatedTabId === newTabId && changeInfo.status === 'complete') {
+                clearTimeout(navTimeout);
+                chrome.tabs.onUpdated.removeListener(navListener);
+                resolve();
+              }
+            };
+            chrome.tabs.onUpdated.addListener(navListener);
+          });
+
+          sendResponse({ success: true, tabId: newTabId, navigatedTo: targetUrl, is_new_tab: true });
+          return;
+        } catch (tabErr) {
+          console.error('Background NEW_TAB error:', tabErr);
+          sendResponse({ success: false, error: tabErr.message });
+          return;
+        }
+      }
+
       // Handle NAVIGATE directly via chrome.tabs API in background worker
       if (ai && ai.action === 'NAVIGATE' && ai.value) {
-        let targetUrl = String(ai.value).trim();
-        if (!/^https?:\/\//i.test(targetUrl) && !targetUrl.startsWith('chrome://') && !targetUrl.startsWith('about:')) {
-          targetUrl = 'https://' + targetUrl;
-        }
+        const targetUrl = resolveTargetUrl(ai.value);
 
         try {
+          console.log(`DrishtiAI: Navigating tab #${tabId} to "${targetUrl}"...`);
           await chrome.tabs.update(tabId, { url: targetUrl });
 
           // Wait for tab navigation to complete loading
@@ -382,7 +429,7 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
             const navTimeout = setTimeout(() => {
               chrome.tabs.onUpdated.removeListener(navListener);
               resolve();
-            }, 6000);
+            }, 7000);
 
             const navListener = (updatedTabId, changeInfo) => {
               if (updatedTabId === tabId && changeInfo.status === 'complete') {

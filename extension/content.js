@@ -748,7 +748,7 @@ if (typeof chrome !== 'undefined' && chrome.runtime && chrome.runtime.onMessage 
         targetElement = document.querySelector(`[data-drishti-id="${ai.target_id}"]`);
       }
 
-      if (!targetElement && ai.action !== 'DONE' && ai.action !== 'WAIT' && ai.action !== 'SCROLL') {
+      if (!targetElement && ai.action !== 'DONE' && ai.action !== 'WAIT' && ai.action !== 'SCROLL' && ai.action !== 'NAVIGATE' && ai.action !== 'NEW_TAB' && ai.action !== 'KEYPRESS') {
         sendResponse({ success: false, error: 'Target element not found' });
         return true;
       }
@@ -789,6 +789,32 @@ if (typeof chrome !== 'undefined' && chrome.runtime && chrome.runtime.onMessage 
               highlightElement(targetElement, highRisk ? `${ai.action} (Approved)` : ai.action, highRisk);
             }
             break;
+          case 'KEYPRESS': {
+            const keyName = (ai.value || 'Enter').trim();
+            const target = targetElement || document.activeElement || document.body;
+            if (target) {
+              try { target.focus(); } catch (e) {}
+              const isEnter = keyName.toLowerCase() === 'enter';
+              const isEsc = keyName.toLowerCase() === 'escape';
+              const keyEventInit = {
+                key: keyName,
+                code: isEnter ? 'Enter' : (isEsc ? 'Escape' : keyName),
+                keyCode: isEnter ? 13 : (isEsc ? 27 : 0),
+                which: isEnter ? 13 : (isEsc ? 27 : 0),
+                bubbles: true,
+                cancelable: true
+              };
+              target.dispatchEvent(new KeyboardEvent('keydown', keyEventInit));
+              target.dispatchEvent(new KeyboardEvent('keypress', keyEventInit));
+              target.dispatchEvent(new KeyboardEvent('keyup', keyEventInit));
+
+              if (isEnter && target.form && typeof target.form.requestSubmit === 'function') {
+                try { target.form.requestSubmit(); } catch (fErr) {}
+              }
+              highlightElement(target, `KEY: ${keyName}`, highRisk);
+            }
+            break;
+          }
           case 'NAVIGATE':
             if (ai.value) window.location.href = ai.value;
             break;

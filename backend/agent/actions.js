@@ -3,18 +3,18 @@ const { z } = require('zod');
 /**
  * Canonical DRISHTI Action Vocabulary
  */
-const ALLOWED_ACTIONS = ['CLICK', 'TYPE', 'SCROLL', 'WAIT', 'NAVIGATE', 'REPLY', 'DONE'];
+const ALLOWED_ACTIONS = ['CLICK', 'TYPE', 'KEYPRESS', 'SCROLL', 'WAIT', 'NAVIGATE', 'NEW_TAB', 'REPLY', 'DONE'];
 
 /**
  * Level 1: Zod Schema Definition for Structured Output
  */
 const SingleActionSchema = z.object({
-  action: z.enum(['CLICK', 'TYPE', 'SCROLL', 'WAIT', 'NAVIGATE', 'REPLY', 'DONE'])
+  action: z.enum(['CLICK', 'TYPE', 'KEYPRESS', 'SCROLL', 'WAIT', 'NAVIGATE', 'NEW_TAB', 'REPLY', 'DONE'])
     .describe('The action type to perform'),
   target_id: z.string().optional()
     .describe('The drishti_id (e.g. element_5) of the element to interact with'),
   value: z.string().optional()
-    .describe('Text to type, URL to navigate to, scroll direction, or reply message'),
+    .describe('Text to type, URL/search query to navigate or open, key name (e.g. Enter), scroll direction, or reply message'),
   reason: z.string().optional()
     .describe('Brief explanation of why this action was selected')
 });
@@ -169,20 +169,36 @@ function validateActions(actions, domData = null, loopCount = 1) {
         break;
       }
 
-      case 'NAVIGATE': {
-        if (!value || typeof value !== 'string' || value.length === 0) {
-          result.errors.push(`NAVIGATE action at index ${i} is missing URL value.`);
+      case 'KEYPRESS': {
+        if (!cleanAction.value) cleanAction.value = 'Enter';
+        break;
+      }
+
+      case 'NAVIGATE':
+      case 'NEW_TAB': {
+        let val = value ? String(value).trim() : (actionType === 'NEW_TAB' ? 'https://www.google.com' : '');
+        if (!val) {
+          result.errors.push(`${actionType} action at index ${i} is missing target URL or search query.`);
           continue;
         }
         // Security check: Block javascript: and data: schemes
-        const lowerUrl = value.toLowerCase().trim();
+        const lowerUrl = val.toLowerCase();
         if (lowerUrl.startsWith('javascript:') || lowerUrl.startsWith('data:') || lowerUrl.startsWith('vbscript:')) {
-          result.errors.push(`SECURITY_VIOLATION: Unsafe URL scheme in NAVIGATE action: "${value}"`);
+          result.errors.push(`SECURITY_VIOLATION: Unsafe URL scheme in ${actionType} action: "${val}"`);
           continue;
         }
-        // Normalize URL if missing http/https protocol
-        if (!/^https?:\/\//i.test(cleanAction.value) && !cleanAction.value.startsWith('chrome://') && !cleanAction.value.startsWith('about:')) {
-          cleanAction.value = 'https://' + cleanAction.value;
+
+        // Intelligently transform raw search queries into Google Search URLs
+        if (!/^https?:\/\//i.test(val) && !val.startsWith('chrome://') && !val.startsWith('about:')) {
+          const isSearchQuery = val.includes(' ') || !val.includes('.') || /^(search\s+for|search|google)\s+/i.test(val);
+          if (isSearchQuery) {
+            const cleanQuery = val.replace(/^(search\s+for|search|google)\s+/i, '').trim();
+            cleanAction.value = 'https://www.google.com/search?q=' + encodeURIComponent(cleanQuery || val);
+          } else {
+            cleanAction.value = 'https://' + val;
+          }
+        } else {
+          cleanAction.value = val;
         }
         break;
       }

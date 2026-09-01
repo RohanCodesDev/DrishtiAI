@@ -769,6 +769,16 @@
           label: `Navigated to ${action.value}`,
           detail: action.reason || ''
         };
+      case 'NEW_TAB':
+        return {
+          label: `Opened new tab at ${action.value}`,
+          detail: action.reason || ''
+        };
+      case 'KEYPRESS':
+        return {
+          label: friendlyName ? `Pressed ${action.value || 'Enter'} on ${friendlyName}` : `Pressed key ${action.value || 'Enter'}`,
+          detail: action.reason || ''
+        };
       case 'WAIT':
         return {
           label: 'Paused for page update',
@@ -1371,8 +1381,12 @@
             const execRes = success ? 'SUCCESS' : ('FAILED: ' + (feedback?.error || 'Unknown'));
             actionHistory.push({ action: ai.action, target: ai.target_id, value: ai.value, execution_result: execRes });
 
-            if (ai.action === 'NAVIGATE' && success) {
-              UI_STATE.currentTurn.statusMessage = `Navigated to ${ai.value}. Inspecting fresh page…`;
+            if (ai.action === 'NEW_TAB' && success && feedback?.tabId) {
+              UI_STATE.boundTabId = feedback.tabId;
+              UI_STATE.currentTurn.statusMessage = `Opened new tab at ${feedback.navigatedTo || ai.value}. Inspecting fresh page…`;
+              await loadBoundTabDOM();
+            } else if (ai.action === 'NAVIGATE' && success) {
+              UI_STATE.currentTurn.statusMessage = `Navigated to ${feedback?.navigatedTo || ai.value}. Inspecting fresh page…`;
               await loadBoundTabDOM();
             } else if (ai.action === 'SCROLL' && success) {
               await cancellableDelay(150);
@@ -1488,8 +1502,12 @@
     const execRes = success ? 'SUCCESS (USER_APPROVED)' : ('FAILED: ' + (feedback?.error || 'Unknown'));
     pending.actionHistory.push({ action: pending.action.action, target: pending.action.target_id, value: pending.action.value, execution_result: execRes });
 
-    if (pending.action.action === 'NAVIGATE' && success) {
-      turn.statusMessage = `Navigated to ${pending.action.value}. Inspecting fresh page…`;
+    if (pending.action.action === 'NEW_TAB' && success && feedback?.tabId) {
+      UI_STATE.boundTabId = feedback.tabId;
+      turn.statusMessage = `Opened new tab at ${feedback.navigatedTo || pending.action.value}. Inspecting fresh page…`;
+      await loadBoundTabDOM();
+    } else if (pending.action.action === 'NAVIGATE' && success) {
+      turn.statusMessage = `Navigated to ${feedback?.navigatedTo || pending.action.value}. Inspecting fresh page…`;
       await loadBoundTabDOM();
     } else if (pending.action.action === 'SCROLL' && success) {
       await cancellableDelay(150);
@@ -1571,8 +1589,12 @@
           const nextExecRes = nextSuccess ? 'SUCCESS' : ('FAILED: ' + (nextFeedback?.error || 'Unknown'));
           pending.actionHistory.push({ action: nextAi.action, target: nextAi.target_id, value: nextAi.value, execution_result: nextExecRes });
 
-          if (nextAi.action === 'NAVIGATE' && nextSuccess) {
-            turn.statusMessage = `Navigated to ${nextAi.value}. Inspecting fresh page…`;
+          if (nextAi.action === 'NEW_TAB' && nextSuccess && nextFeedback?.tabId) {
+            UI_STATE.boundTabId = nextFeedback.tabId;
+            turn.statusMessage = `Opened new tab at ${nextFeedback.navigatedTo || nextAi.value}. Inspecting fresh page…`;
+            await loadBoundTabDOM();
+          } else if (nextAi.action === 'NAVIGATE' && nextSuccess) {
+            turn.statusMessage = `Navigated to ${nextFeedback?.navigatedTo || nextAi.value}. Inspecting fresh page…`;
             await loadBoundTabDOM();
           } else if (nextAi.action === 'SCROLL' && nextSuccess) {
             await cancellableDelay(150);

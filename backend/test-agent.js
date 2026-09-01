@@ -155,13 +155,15 @@ async function main() {
   });
 
   runTest('LangChain DRISHTI capability tools are properly registered', () => {
-    assert.strictEqual(DRISHTI_TOOLS.length, 7);
+    assert.strictEqual(DRISHTI_TOOLS.length, 9);
     const toolNames = DRISHTI_TOOLS.map(t => t.name);
     assert.ok(toolNames.includes('click_element'));
     assert.ok(toolNames.includes('type_text'));
+    assert.ok(toolNames.includes('key_press'));
     assert.ok(toolNames.includes('scroll_page'));
     assert.ok(toolNames.includes('wait'));
     assert.ok(toolNames.includes('navigate'));
+    assert.ok(toolNames.includes('new_tab'));
     assert.ok(toolNames.includes('reply_user'));
     assert.ok(toolNames.includes('finish_task'));
   });
@@ -225,6 +227,29 @@ async function main() {
 
     assert.strictEqual(result.valid, true);
     assert.strictEqual(result.actions[0].value, 'https://google.com');
+  });
+
+  runTest('Validator resolves search queries into Google Search URLs', () => {
+    const result = validateActions([
+      { action: 'NAVIGATE', value: 'search for best laptops 2026', reason: 'Search query' }
+    ], sampleSanitizedDom, 1);
+
+    assert.strictEqual(result.valid, true);
+    assert.ok(result.actions[0].value.startsWith('https://www.google.com/search?q='));
+    assert.ok(result.actions[0].value.includes('best%20laptops%202026') || result.actions[0].value.includes('best+laptops+2026'));
+  });
+
+  runTest('Validator approves NEW_TAB and KEYPRESS actions', () => {
+    const result = validateActions([
+      { action: 'NEW_TAB', value: 'search AI news', reason: 'Open in new tab' },
+      { action: 'KEYPRESS', target_id: 'element_2', value: 'Enter', reason: 'Submit form' }
+    ], sampleSanitizedDom, 1);
+
+    assert.strictEqual(result.valid, true);
+    assert.strictEqual(result.actions[0].action, 'NEW_TAB');
+    assert.ok(result.actions[0].value.startsWith('https://www.google.com/search?q='));
+    assert.strictEqual(result.actions[1].action, 'KEYPRESS');
+    assert.strictEqual(result.actions[1].value, 'Enter');
   });
 
   runTest('Validator warns when target_id does not exist in DOM snapshot', () => {

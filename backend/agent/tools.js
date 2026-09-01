@@ -136,12 +136,52 @@ const finishTaskTool = tool(
   }
 );
 
+const keyPressTool = tool(
+  async ({ target_id, value, reason }) => {
+    return {
+      action: 'KEYPRESS',
+      target_id: target_id || undefined,
+      value: value || 'Enter',
+      reason: reason || 'Press key'
+    };
+  },
+  {
+    name: 'key_press',
+    description: 'Simulate pressing a specific keyboard key (such as Enter, Tab, Escape, ArrowDown) on an input field or active element.',
+    schema: z.object({
+      target_id: z.string().optional().describe('Optional drishti_id of the element to press key on'),
+      value: z.string().describe('The key name to press, e.g. "Enter", "Tab", "Escape"'),
+      reason: z.string().describe('Reason for key press')
+    })
+  }
+);
+
+const newTabTool = tool(
+  async ({ value, reason }) => {
+    return {
+      action: 'NEW_TAB',
+      value: value || 'https://www.google.com',
+      reason: reason || 'Open in new tab'
+    };
+  },
+  {
+    name: 'new_tab',
+    description: 'Open a brand new browser tab and navigate to a URL or Google search query.',
+    schema: z.object({
+      value: z.string().describe('The URL or search query to open in the new tab'),
+      reason: z.string().describe('Reason for opening new tab')
+    })
+  }
+);
+
 const DRISHTI_TOOLS = [
   clickElementTool,
   typeTextTool,
+  keyPressTool,
   scrollPageTool,
   waitTool,
   navigateTool,
+  newTabTool,
   replyUserTool,
   finishTaskTool
 ];
@@ -149,9 +189,11 @@ const DRISHTI_TOOLS = [
 module.exports = {
   clickElementTool,
   typeTextTool,
+  keyPressTool,
   scrollPageTool,
   waitTool,
   navigateTool,
+  newTabTool,
   replyUserTool,
   finishTaskTool,
   DRISHTI_TOOLS
