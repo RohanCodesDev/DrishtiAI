@@ -1989,7 +1989,15 @@
             adjustTextareaHeight();
           }
           setInspectModeState(false);
-          startAgentRun(message.prompt);
+
+          if (message.actionType === 'ASK_CUSTOM') {
+            if (taskInput) {
+              taskInput.focus();
+              taskInput.setSelectionRange(taskInput.value.length, taskInput.value.length);
+            }
+          } else {
+            startAgentRun(message.prompt);
+          }
           sendResponse({ success: true });
           return true;
         }

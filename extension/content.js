@@ -1201,11 +1201,11 @@ function injectLensStyles() {
     #drishti-lens-action-menu {
       position: absolute;
       z-index: 2147483646;
-      width: 320px;
+      width: 360px;
       background: rgba(15, 23, 42, 0.96);
       backdrop-filter: blur(16px);
       -webkit-backdrop-filter: blur(16px);
-      border: 1px solid rgba(99, 102, 241, 0.4);
+      border: 1px solid rgba(99, 102, 241, 0.45);
       box-shadow: 0 16px 36px rgba(0, 0, 0, 0.55), 0 0 20px rgba(99, 102, 241, 0.25);
       border-radius: 12px;
       padding: 10px 12px;
@@ -1265,21 +1265,22 @@ function injectLensStyles() {
     }
     .drishti-menu-actions {
       display: grid;
-      grid-template-columns: 1fr 1fr;
-      gap: 8px;
+      grid-template-columns: 1fr 1fr 1fr;
+      gap: 6px;
     }
     .drishti-btn-action {
       display: flex;
       align-items: center;
       justify-content: center;
-      gap: 6px;
-      padding: 7px 10px;
+      gap: 5px;
+      padding: 7px 8px;
       border-radius: 8px;
-      font-size: 11.5px;
+      font-size: 11px;
       font-weight: 600;
       cursor: pointer;
       border: none;
       transition: all 0.18s ease;
+      white-space: nowrap;
     }
     .drishti-btn-summarize {
       background: linear-gradient(135deg, #3b82f6, #1d4ed8);
@@ -1301,6 +1302,16 @@ function injectLensStyles() {
       transform: translateY(-1px);
       box-shadow: 0 4px 12px rgba(16, 185, 129, 0.5);
     }
+    .drishti-btn-ask {
+      background: linear-gradient(135deg, #8b5cf6, #6d28d9);
+      color: #ffffff;
+      box-shadow: 0 2px 8px rgba(139, 92, 246, 0.35);
+    }
+    .drishti-btn-ask:hover {
+      background: linear-gradient(135deg, #a78bfa, #7c3aed);
+      transform: translateY(-1px);
+      box-shadow: 0 4px 12px rgba(139, 92, 246, 0.5);
+    }
     @keyframes drishti-lens-pulse {
       0%, 100% { opacity: 1; transform: scale(1); }
       50% { opacity: 0.4; transform: scale(0.8); }
@@ -1317,6 +1328,64 @@ function injectLensStyles() {
   document.head.appendChild(style);
 }
 
+// Convert HTML <table> rows to structured Markdown
+function formatTableAsMarkdown(table) {
+  if (!table) return '';
+  const rows = Array.from(table.querySelectorAll('tr'));
+  if (rows.length === 0) return (table.innerText || '').trim();
+
+  const markdownRows = [];
+  let headerColCount = 0;
+
+  rows.forEach((row, rowIndex) => {
+    const cells = Array.from(row.querySelectorAll('th, td'));
+    const cellTexts = cells.map(cell => (cell.innerText || cell.textContent || '').trim().replace(/\|/g, '\\|'));
+    
+    if (cellTexts.length > 0) {
+      markdownRows.push(`| ${cellTexts.join(' | ')} |`);
+      if (rowIndex === 0) {
+        headerColCount = cellTexts.length;
+        markdownRows.push(`| ${cellTexts.map(() => '---').join(' | ')} |`);
+      }
+    }
+  });
+
+  return markdownRows.join('\n');
+}
+
+// Extract clean, formatted text from any element type
+function extractElementCleanText(el) {
+  if (!el) return '';
+  
+  // 1. Table element formatting
+  if (el.tagName === 'TABLE' || (typeof el.closest === 'function' && el.closest('table'))) {
+    const table = el.tagName === 'TABLE' ? el : (typeof el.closest === 'function' ? el.closest('table') : el);
+    return formatTableAsMarkdown(table);
+  }
+  
+  // 2. Canvas graphic element decoding
+  if (el.tagName === 'CANVAS' || (typeof el.querySelector === 'function' && el.querySelector('canvas'))) {
+    const canvas = el.tagName === 'CANVAS' ? el : (typeof el.querySelector === 'function' ? el.querySelector('canvas') : el);
+    if (canvas && canvas.dataset?.drishtiOcrText) {
+      return canvas.dataset.drishtiOcrText;
+    }
+    const label = (canvas && typeof canvas.getAttribute === 'function' ? (canvas.getAttribute('aria-label') || canvas.getAttribute('title')) : null) || canvas?.id;
+    return label ? `[Canvas Graphic: ${label}]` : '[Canvas Graphic: Visual Confirmation Badge]';
+  }
+
+  // 3. Form input / textarea / select
+  if (el.tagName === 'INPUT' || el.tagName === 'TEXTAREA') {
+    return el.value || el.placeholder || '';
+  }
+  if (el.tagName === 'SELECT') {
+    const selected = el.options ? el.options[el.selectedIndex] : null;
+    return selected ? selected.text : '';
+  }
+
+  // 4. Standard text container / article / paragraph
+  return (el.innerText || el.textContent || (typeof el.getAttribute === 'function' ? el.getAttribute('aria-label') : '') || '').trim();
+}
+
 function startInspectMode() {
   if (isInspectModeActive) return;
   isInspectModeActive = true;
@@ -1330,7 +1399,7 @@ function startInspectMode() {
       <div class="drishti-lens-banner-content">
         <span class="drishti-lens-pulse-dot"></span>
         <span class="drishti-lens-banner-title">🔍 Drishti Web Lens</span>
-        <span class="drishti-lens-banner-hint">Hover &amp; Click any element to Summarize or Search (Esc to Exit)</span>
+        <span class="drishti-lens-banner-hint">Hover &amp; Click any element (Esc to Exit)</span>
       </div>
       <button id="drishti-lens-banner-close" class="drishti-lens-banner-close" title="Exit Inspect Mode (Esc)">✕</button>
     `;
@@ -1423,7 +1492,7 @@ function updateReticlePosition(el) {
 
   if (tagBadge) tagBadge.textContent = `<${el.tagName.toLowerCase()}>`;
   if (textBadge) {
-    let preview = (el.innerText || el.textContent || el.getAttribute('aria-label') || el.value || '').trim();
+    let preview = extractElementCleanText(el);
     if (preview.length > 35) preview = preview.slice(0, 35) + '…';
     textBadge.textContent = preview ? `"${preview}"` : (el.id ? `#${el.id}` : el.className ? `.${el.className.split(' ')[0]}` : '');
   }
@@ -1450,9 +1519,9 @@ function showLensActionMenu(el) {
   const scrollY = window.scrollY || window.pageYOffset;
 
   // Extract raw text and sanitize it via processPII
-  const rawText = (el.innerText || el.textContent || el.value || el.getAttribute('aria-label') || '').trim();
+  const rawText = extractElementCleanText(el);
   const sanitized = typeof processPII === 'function' ? processPII(rawText, currentFirewallConfig) : { redactedText: rawText };
-  const cleanText = sanitized.redactedText || rawText;
+  let cleanText = sanitized.redactedText || rawText;
 
   lensActionMenuElement = document.createElement('div');
   lensActionMenuElement.id = 'drishti-lens-action-menu';
@@ -1461,12 +1530,12 @@ function showLensActionMenu(el) {
   const topPos = rect.top > menuHeight + 15
     ? scrollY + rect.top - menuHeight - 10
     : scrollY + rect.bottom + 10;
-  const leftPos = Math.max(10, Math.min(scrollX + rect.left, window.innerWidth - 340));
+  const leftPos = Math.max(10, Math.min(scrollX + rect.left, window.innerWidth - 380));
 
   lensActionMenuElement.style.top = `${topPos}px`;
   lensActionMenuElement.style.left = `${leftPos}px`;
 
-  const previewSnippet = cleanText.length > 50 ? cleanText.slice(0, 50) + '…' : (cleanText || 'Selected Element');
+  const previewSnippet = cleanText.length > 45 ? cleanText.slice(0, 45) + '…' : (cleanText || 'Selected Element');
 
   lensActionMenuElement.innerHTML = `
     <div class="drishti-menu-header">
@@ -1485,10 +1554,38 @@ function showLensActionMenu(el) {
         <span class="drishti-btn-icon">🔍</span>
         <span class="drishti-btn-text">Search Web</span>
       </button>
+      <button class="drishti-btn-action drishti-btn-ask" id="drishti-action-ask">
+        <span class="drishti-btn-icon">💬</span>
+        <span class="drishti-btn-text">Ask AI</span>
+      </button>
     </div>
   `;
 
   document.body.appendChild(lensActionMenuElement);
+
+  // If selecting a canvas, perform on-device live OCR decoding immediately
+  const canvasEl = el.tagName === 'CANVAS' ? el : el.querySelector('canvas');
+  if (canvasEl && !canvasEl.dataset?.drishtiOcrText) {
+    try {
+      const cDataUrl = canvasEl.toDataURL('image/png');
+      chrome.runtime.sendMessage({
+        target: 'offscreen',
+        type: 'RUN_CANVAS_OCR_DIRECT',
+        dataUrl: cDataUrl,
+        config: currentFirewallConfig
+      }, (res) => {
+        if (res && res.success && res.text) {
+          canvasEl.dataset.drishtiOcrText = res.text;
+          cleanText = res.text;
+          const snippetEl = lensActionMenuElement?.querySelector('.drishti-menu-snippet');
+          if (snippetEl) {
+            snippetEl.textContent = `"${res.text.length > 45 ? res.text.slice(0, 45) + '…' : res.text}"`;
+            snippetEl.title = res.text;
+          }
+        }
+      });
+    } catch (e) {}
+  }
 
   // Bind Summarize Action
   const summarizeBtn = lensActionMenuElement.querySelector('#drishti-action-summarize');
@@ -1509,6 +1606,17 @@ function showLensActionMenu(el) {
       if (query.length > 100) query = query.slice(0, 100);
       const prompt = `Search Google for "${query}" and summarize the findings.`;
       triggerElementAction('SEARCH', el, cleanText, prompt);
+    });
+  }
+
+  // Bind Ask AI Custom Prompt Action
+  const askBtn = lensActionMenuElement.querySelector('#drishti-action-ask');
+  if (askBtn) {
+    askBtn.addEventListener('click', (e) => {
+      e.stopPropagation();
+      const formattedSnippet = cleanText.length > 300 ? cleanText.slice(0, 300) + '...' : cleanText;
+      const prompt = `Regarding the selected <${el.tagName.toLowerCase()}>\n> ${formattedSnippet.replace(/\n/g, '\n> ')}\n\n`;
+      triggerElementAction('ASK_CUSTOM', el, cleanText, prompt);
     });
   }
 
@@ -1559,7 +1667,9 @@ if (typeof module !== 'undefined' && module.exports) {
     isHighRiskAction,
     HIGH_RISK_KEYWORDS,
     startInspectMode,
-    stopInspectMode
+    stopInspectMode,
+    formatTableAsMarkdown,
+    extractElementCleanText
   };
 }
 

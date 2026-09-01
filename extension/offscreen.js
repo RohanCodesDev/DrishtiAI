@@ -302,6 +302,37 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
       })();
       return true; // Keep channel open for async response
     }
+
+    // Direct single canvas OCR for Web Lens
+    if (message.type === 'RUN_CANVAS_OCR_DIRECT') {
+      (async () => {
+        try {
+          if (!message.dataUrl) {
+            sendResponse({ success: false, error: 'NO_DATA_URL' });
+            return;
+          }
+          const w = await getWorker();
+          const faceResult = await detectAndRedactFaces(message.dataUrl, message.config);
+          const canvasRes = await w.recognize(faceResult.dataUrl);
+          let rawText = (canvasRes?.data?.text || '').trim();
+          let sanitizedText = rawText;
+
+          if (typeof window.__DrishtiFirewall !== 'undefined' && window.__DrishtiFirewall.processPII) {
+            const redacted = window.__DrishtiFirewall.processPII(rawText, message.config);
+            sanitizedText = (redacted && redacted.redactedText !== undefined) ? redacted.redactedText : (redacted?.text || rawText);
+          }
+
+          sendResponse({
+            success: true,
+            text: sanitizedText,
+            facesRedacted: faceResult.faceCount
+          });
+        } catch (err) {
+          sendResponse({ success: false, error: err.message });
+        }
+      })();
+      return true;
+    }
     
     console.warn('DrishtiAI: Unknown message type received in offscreen document:', message.type);
     sendResponse({ success: false, error: 'UNKNOWN_MESSAGE_TYPE' });

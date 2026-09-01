@@ -16,7 +16,9 @@ const {
   setNativeInputValue,
   HIGH_RISK_KEYWORDS,
   startInspectMode,
-  stopInspectMode
+  stopInspectMode,
+  formatTableAsMarkdown,
+  extractElementCleanText
 } = require('../extension/content.js');
 
 // Import prompt builder from backend/prompts.js
@@ -388,6 +390,54 @@ test('Web Lens creates Search Google prompt from selected element keyword', () =
   
   assert.strictEqual(prompt.includes('Search Google for "WebAssembly SIMD Hardware Acceleration"'), true);
   assert.strictEqual(prompt.includes('summarize the top findings'), true);
+});
+
+test('Web Lens formats HTML tables as structured Markdown tables', () => {
+  const tableMock = {
+    tagName: 'TABLE',
+    querySelectorAll: (selector) => {
+      if (selector === 'tr') {
+        return [
+          {
+            querySelectorAll: () => [
+              { innerText: 'Component' },
+              { innerText: 'Latency' },
+              { innerText: 'Privacy' }
+            ]
+          },
+          {
+            querySelectorAll: () => [
+              { innerText: 'Firewall' },
+              { innerText: '< 2 ms' },
+              { innerText: '100% Masked' }
+            ]
+          }
+        ];
+      }
+      return [];
+    }
+  };
+
+  const mdTable = formatTableAsMarkdown(tableMock);
+  assert.strictEqual(mdTable.includes('| Component | Latency | Privacy |'), true);
+  assert.strictEqual(mdTable.includes('| --- | --- | --- |'), true);
+  assert.strictEqual(mdTable.includes('| Firewall | < 2 ms | 100% Masked |'), true);
+});
+
+test('Web Lens extracts Canvas graphic OCR text and creates Ask AI custom prompt', () => {
+  const canvasMock = {
+    tagName: 'CANVAS',
+    dataset: { drishtiOcrText: 'CONFIRMATION: 9948-AB' },
+    getAttribute: () => null,
+    querySelector: () => null
+  };
+
+  const extracted = extractElementCleanText(canvasMock);
+  assert.strictEqual(extracted, 'CONFIRMATION: 9948-AB');
+
+  const customPrompt = `Regarding the selected <canvas>\n> ${extracted}\n\n`;
+  assert.strictEqual(customPrompt.includes('Regarding the selected <canvas>'), true);
+  assert.strictEqual(customPrompt.includes('> CONFIRMATION: 9948-AB'), true);
 });
 
 // SUMMARY
