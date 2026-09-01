@@ -12,7 +12,7 @@ async function getWorker() {
     console.log('DrishtiAI: Initializing Tesseract OCR worker...');
     const w = await Tesseract.createWorker('eng', 1, {
       workerPath: chrome.runtime.getURL('lib/node_modules/tesseract.js/dist/worker.min.js'),
-      corePath: chrome.runtime.getURL('lib/node_modules/tesseract.js/dist'),
+      corePath: chrome.runtime.getURL('lib/node_modules/tesseract.js-core'),
       langPath: chrome.runtime.getURL('lib'),
       workerBlobURL: false, // CRITICAL FOR CHROME EXTENSIONS / MV3: prevents blocked blob: worker CSP violations
       gzip: true,

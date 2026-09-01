@@ -46,16 +46,8 @@ async function ensureOffscreenDocument() {
 // Pre-warm offscreen doc at startup
 ensureOffscreenDocument().catch(() => {});
 
-
-// DrishtiAI Background Service Worker
-// Manages tab-specific side panel behavior and message routing.
-
 // Automatically open the side panel when the user clicks the extension icon
 if (typeof chrome !== 'undefined' && chrome.sidePanel) {
-  chrome.sidePanel
-    .setPanelBehavior({ openPanelOnActionClick: true })
-    .catch((err) => console.error('DrishtiAI: Failed to set panel behavior:', err));
-} else if (typeof chrome !== 'undefined' && chrome.sidePanel) {
   chrome.sidePanel
     .setPanelBehavior({ openPanelOnActionClick: true })
     .catch((err) => console.error('DrishtiAI: Failed to set panel behavior:', err));
@@ -100,10 +92,31 @@ async function getTabDOM(targetTabId, config = null) {
   }
 
   if (isRestrictedUrl(tabUrl)) {
-    const err = new Error('RESTRICTED_PAGE');
-    err.code = 'RESTRICTED_PAGE';
-    err.url = tabUrl;
-    throw err;
+    const isNewTab = tabUrl.startsWith('chrome://newtab') || tabUrl.startsWith('about:') || tabUrl.startsWith('edge://newtab') || tabUrl === '';
+    const friendlyTitle = isNewTab ? 'New Tab' : (tabUrl || 'Restricted Page');
+    return {
+      title: friendlyTitle,
+      url: tabUrl || 'chrome://newtab',
+      element_count: 1,
+      is_restricted: true,
+      canvases: [],
+      root: {
+        id: 'drishti-restricted-root',
+        tag: 'BODY',
+        type: 'root',
+        text: `Active tab is on ${friendlyTitle} (${tabUrl}). Ready for navigation. To visit a website, issue a NAVIGATE action with the target URL (e.g. https://www.google.com).`,
+        children: [
+          {
+            id: 'drishti-newtab-notice',
+            tag: 'DIV',
+            type: 'container',
+            text: `Browser Page: ${friendlyTitle}`,
+            children: []
+          }
+        ]
+      },
+      visual_context: `(Active tab is ${friendlyTitle} [${tabUrl}]. Ready for navigation.)`
+    };
   }
 
   // Attempt 1: Try sending message to active content script v2 in target tab
@@ -152,7 +165,21 @@ async function getTabDOM(targetTabId, config = null) {
       return executionResults[0].result;
     }
   } catch (injectErr) {
-    throw new Error(`INJECTION_FAILED: ${injectErr.message}`);
+    // Return fallback synthetic DOM if script injection is not allowed on this page
+    return {
+      title: tabUrl || 'Browser Tab',
+      url: tabUrl,
+      element_count: 1,
+      canvases: [],
+      root: {
+        id: 'drishti-fallback-root',
+        tag: 'BODY',
+        type: 'root',
+        text: `Tab loaded (${tabUrl}). Ready for navigation or analysis.`,
+        children: []
+      },
+      visual_context: `(Tab loaded at ${tabUrl})`
+    };
   }
 
   throw new Error('NO_DOM_DATA_RETURNED');
@@ -193,7 +220,6 @@ async function captureAndRunOCR(targetTabId, config = null, canvases = []) {
     }
 
     console.log('[DrishtiAI Background] 📸 Step 2/3: Capturing visible viewport screenshot...');
-    // Capture the visible viewport of the target window
     const dataUrl = await chrome.tabs.captureVisibleTab(targetWindowId, { format: 'png' });
     if (!dataUrl && (!canvases || canvases.length === 0)) {
       console.warn('[DrishtiAI Background] Screenshot capture returned empty.');
@@ -201,7 +227,6 @@ async function captureAndRunOCR(targetTabId, config = null, canvases = []) {
     }
 
     console.log('[DrishtiAI Background] ⏳ Step 3/3: Running Tesseract OCR in Offscreen Worker...');
-    // Dispatch to offscreen document Tesseract worker with a 25-second safety timeout
     const ocrPromise = new Promise((resolve) => {
       chrome.runtime.sendMessage({
         target: 'offscreen',
@@ -252,7 +277,11 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
       try {
         console.log(`\n[DrishtiAI Background] 📥 Step 1/3: Extracting DOM & Context for Tab #${message.tabId}...`);
         const domData = await getTabDOM(message.tabId, message.config);
-        domData.visual_context = await captureAndRunOCR(message.tabId, message.config, domData.canvases);
+        
+        if (!domData.is_restricted) {
+          domData.visual_context = await captureAndRunOCR(message.tabId, message.config, domData.canvases);
+        }
+        
         console.log(`[DrishtiAI Background] ✅ Context Packaged: ${domData.element_count} elements, OCR text length: ${domData.visual_context?.length || 0}`);
         sendResponse({ success: true, data: domData });
       } catch (err) {
@@ -296,7 +325,9 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
                 });
               });
               if (response && response.success && response.data) {
-                response.data.visual_context = await captureAndRunOCR(tabId, message.config, response.data.canvases);
+                if (!response.data.is_restricted) {
+                  response.data.visual_context = await captureAndRunOCR(tabId, message.config, response.data.canvases);
+                }
                 sendResponse({ success: true, data: response.data });
                 return;
               }
@@ -306,7 +337,9 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
           }
         }
         const domData = await getTabDOM(tabId, message.config);
-        domData.visual_context = await captureAndRunOCR(tabId, message.config, domData.canvases);
+        if (!domData.is_restricted) {
+          domData.visual_context = await captureAndRunOCR(tabId, message.config, domData.canvases);
+        }
         sendResponse({ success: true, data: domData });
       } catch (err) {
         sendResponse({
@@ -323,15 +356,62 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
     (async () => {
       let tabId = message.tabId;
       if (!tabId) {
-        const [activeTab] = await chrome.tabs.query({ active: true, currentWindow: true });
+        const [activeTab] = await chrome.tabs.query({ active: true, currentWindow: true }).catch(() => []);
         tabId = activeTab?.id;
       }
-      if (tabId) {
-        chrome.tabs.sendMessage(tabId, message, (res) => {
-          if (chrome.runtime.lastError) console.error('EXECUTE_ACTION error:', chrome.runtime.lastError.message);
-          if (sendResponse) sendResponse(res);
-        });
+
+      if (!tabId) {
+        sendResponse({ success: false, error: 'NO_ACTIVE_TAB_FOUND' });
+        return;
       }
+
+      const ai = message.action;
+
+      // Handle NAVIGATE directly via chrome.tabs API in background worker
+      if (ai && ai.action === 'NAVIGATE' && ai.value) {
+        let targetUrl = String(ai.value).trim();
+        if (!/^https?:\/\//i.test(targetUrl) && !targetUrl.startsWith('chrome://') && !targetUrl.startsWith('about:')) {
+          targetUrl = 'https://' + targetUrl;
+        }
+
+        try {
+          await chrome.tabs.update(tabId, { url: targetUrl });
+
+          // Wait for tab navigation to complete loading
+          await new Promise((resolve) => {
+            const navTimeout = setTimeout(() => {
+              chrome.tabs.onUpdated.removeListener(navListener);
+              resolve();
+            }, 6000);
+
+            const navListener = (updatedTabId, changeInfo) => {
+              if (updatedTabId === tabId && changeInfo.status === 'complete') {
+                clearTimeout(navTimeout);
+                chrome.tabs.onUpdated.removeListener(navListener);
+                resolve();
+              }
+            };
+            chrome.tabs.onUpdated.addListener(navListener);
+          });
+
+          sendResponse({ success: true, navigatedTo: targetUrl });
+          return;
+        } catch (navErr) {
+          console.error('Background navigation error:', navErr);
+          sendResponse({ success: false, error: navErr.message });
+          return;
+        }
+      }
+
+      chrome.tabs.sendMessage(tabId, message, (res) => {
+        if (chrome.runtime.lastError) {
+          const errMsg = chrome.runtime.lastError.message || 'Failed to communicate with tab';
+          console.error('EXECUTE_ACTION error:', errMsg);
+          sendResponse({ success: false, error: errMsg });
+        } else {
+          sendResponse(res || { success: false, error: 'EMPTY_TAB_RESPONSE' });
+        }
+      });
     })();
     return true;
   }

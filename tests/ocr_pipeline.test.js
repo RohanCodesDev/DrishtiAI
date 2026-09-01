@@ -7,8 +7,15 @@
 const assert = require('assert');
 const path = require('path');
 
-// Import privacy firewall from content.js
-const { processPII, normalizeFirewallConfig, DEFAULT_FIREWALL_CONFIG } = require('../extension/content.js');
+// Import privacy firewall and action helpers from content.js
+const { 
+  processPII, 
+  normalizeFirewallConfig, 
+  DEFAULT_FIREWALL_CONFIG,
+  isHighRiskAction,
+  setNativeInputValue,
+  HIGH_RISK_KEYWORDS
+} = require('../extension/content.js');
 
 // Import prompt builder from backend/prompts.js
 const { buildUserPrompt, AGENT_SYSTEM_PROMPT } = require('../backend/prompts.js');
@@ -202,6 +209,97 @@ test('Truncates overly large visual context to prevent token overflows', () => {
   assert.ok(prompt.length < 6000);
 });
 
+// TEST GROUP 5: Safe Action Execution & Modern SPA Input Binding
+console.log('\n--- Group 5: Safe Action Execution & Modern SPA Input Binding ---');
+
+test('Detects destructive high-risk actions (delete account, checkout pay, purge)', () => {
+  const deleteBtnMock = {
+    textContent: 'Delete Account Permanently',
+    getAttribute: (attr) => attr === 'id' ? 'btn-delete' : null
+  };
+  const isRisk = isHighRiskAction(deleteBtnMock, { action: 'CLICK', target_id: 'btn-delete' });
+  assert.strictEqual(isRisk, true, 'Clicking delete account button must be flagged high risk');
+
+  const payBtnMock = {
+    textContent: 'Checkout and Pay $150.00 Now',
+    getAttribute: () => null
+  };
+  const isPayRisk = isHighRiskAction(payBtnMock, { action: 'CLICK' });
+  assert.strictEqual(isPayRisk, true, 'Payment button click must be flagged high risk');
+});
+
+test('Allows safe benign actions without flagging high risk', () => {
+  const searchInputMock = {
+    textContent: '',
+    value: 'laptop deals',
+    getAttribute: (attr) => attr === 'name' ? 'search_query' : null
+  };
+  const isRisk = isHighRiskAction(searchInputMock, { action: 'TYPE', value: 'laptop deals' });
+  assert.strictEqual(isRisk, false, 'Standard search input typing must not be flagged high risk');
+
+  const nextBtnMock = {
+    textContent: 'Next Page ›',
+    getAttribute: () => null
+  };
+  const isNextRisk = isHighRiskAction(nextBtnMock, { action: 'CLICK' });
+  assert.strictEqual(isNextRisk, false, 'Next page button must not be flagged high risk');
+});
+
+test('Correctly sets values on standard and contenteditable simulated elements', () => {
+  // 1. ContentEditable Mock
+  const contentEditableMock = {
+    isContentEditable: true,
+    innerText: '',
+    focus: () => {},
+    dispatchEvent: () => {}
+  };
+  setNativeInputValue(contentEditableMock, 'Hello from Agent');
+  assert.strictEqual(contentEditableMock.innerText, 'Hello from Agent');
+
+  // 2. Standard Input Mock
+  const inputMock = {
+    tagName: 'INPUT',
+    value: '',
+    focus: () => {},
+    dispatchEvent: () => {}
+  };
+  setNativeInputValue(inputMock, 'Agent Test Input');
+  assert.strictEqual(inputMock.value, 'Agent Test Input');
+
+  // 3. Checkbox Mock
+  const checkboxMock = {
+    tagName: 'INPUT',
+    type: 'checkbox',
+    checked: false,
+    focus: () => {},
+    dispatchEvent: () => {}
+  };
+  setNativeInputValue(checkboxMock, 'true');
+  assert.strictEqual(checkboxMock.checked, true);
+});
+
+test('Matches select dropdown options by text or value', () => {
+  const selectMock = {
+    tagName: 'SELECT',
+    selectedIndex: 0,
+    options: [
+      { value: 'us', text: 'United States' },
+      { value: 'in', text: 'India' },
+      { value: 'de', text: 'Germany' }
+    ],
+    focus: () => {},
+    dispatchEvent: () => {}
+  };
+
+  // Match by option display text
+  setNativeInputValue(selectMock, 'India');
+  assert.strictEqual(selectMock.selectedIndex, 1);
+
+  // Match by option value
+  setNativeInputValue(selectMock, 'de');
+  assert.strictEqual(selectMock.selectedIndex, 2);
+});
+
 // SUMMARY
 console.log(`\n========================================`);
 console.log(`Tests Completed: ${passedTests} / ${totalTests} Passed`);
@@ -210,5 +308,6 @@ console.log(`========================================\n`);
 if (passedTests !== totalTests) {
   process.exit(1);
 } else {
-  console.log('🎉 All Phase 10 OCR & Vision synchronization tests passed successfully!');
+  console.log('🎉 All Phase 10 OCR & Action Safety tests passed successfully!');
 }
+

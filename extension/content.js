@@ -743,22 +743,20 @@ if (typeof chrome !== 'undefined' && chrome.runtime && chrome.runtime.onMessage 
         return true;
       }
 
+      const highRisk = isHighRiskAction(targetElement, ai);
+
       try {
         switch (ai.action) {
           case 'CLICK':
             if (targetElement) {
-              targetElement.focus();
-              targetElement.click();
-              highlightElement(targetElement, ai.action);
+              simulateClick(targetElement);
+              highlightElement(targetElement, ai.action, highRisk);
             }
             break;
           case 'TYPE':
             if (targetElement) {
-              targetElement.focus();
-              targetElement.value = ai.value || '';
-              targetElement.dispatchEvent(new Event('input', { bubbles: true }));
-              targetElement.dispatchEvent(new Event('change', { bubbles: true }));
-              highlightElement(targetElement, ai.action);
+              setNativeInputValue(targetElement, ai.value || '');
+              highlightElement(targetElement, ai.action, highRisk);
             }
             break;
           case 'NAVIGATE':
@@ -805,21 +803,141 @@ if (typeof chrome !== 'undefined' && chrome.runtime && chrome.runtime.onMessage 
             }
 
             if (targetElement) {
-              setTimeout(() => highlightElement(targetElement, ai.action), 50);
+              setTimeout(() => highlightElement(targetElement, ai.action, highRisk), 50);
             }
             break;
           }
           default:
-            if (targetElement) highlightElement(targetElement, ai.action);
+            if (targetElement) highlightElement(targetElement, ai.action, highRisk);
             break;
         }
-        sendResponse({ success: true });
+        sendResponse({ success: true, is_high_risk: highRisk });
       } catch (e) {
-        sendResponse({ success: false, error: e.message });
+        sendResponse({ success: false, error: e.message, is_high_risk: highRisk });
       }
       return true;
     }
   });
+}
+
+// Modern Framework (React, Vue, Angular) Native Input Setter & Rich Field Formatter
+function setNativeInputValue(el, value) {
+  if (!el) return;
+  const tag = el.tagName ? el.tagName.toUpperCase() : '';
+  const val = value !== undefined && value !== null ? String(value) : '';
+
+  if (el.isContentEditable) {
+    el.focus();
+    el.innerText = val;
+    el.dispatchEvent(new Event('input', { bubbles: true }));
+    el.dispatchEvent(new Event('change', { bubbles: true }));
+    return;
+  }
+
+  if (tag === 'SELECT') {
+    el.focus();
+    let matched = false;
+    if (el.options) {
+      for (let i = 0; i < el.options.length; i++) {
+        const opt = el.options[i];
+        if (opt.value === val || (opt.text && opt.text.trim().toLowerCase() === val.toLowerCase())) {
+          el.selectedIndex = i;
+          matched = true;
+          break;
+        }
+      }
+    }
+    if (!matched && el.options && el.options.length > 0) {
+      el.value = val;
+    }
+    el.dispatchEvent(new Event('change', { bubbles: true }));
+    el.dispatchEvent(new Event('input', { bubbles: true }));
+    return;
+  }
+
+  if (tag === 'INPUT' && (el.type === 'checkbox' || el.type === 'radio')) {
+    el.focus();
+    const boolVal = val === 'true' || val === '1' || val.toLowerCase() === 'check' || val.toLowerCase() === 'on';
+    if (el.type === 'checkbox') {
+      el.checked = boolVal !== undefined ? boolVal : !el.checked;
+    } else {
+      el.checked = true;
+    }
+    el.dispatchEvent(new Event('change', { bubbles: true }));
+    el.dispatchEvent(new Event('input', { bubbles: true }));
+    return;
+  }
+
+  // Modern Framework (React, Vue, Angular) Prototype Value Setter Fallback
+  let proto = null;
+  if (tag === 'INPUT' && typeof window !== 'undefined' && window.HTMLInputElement) {
+    proto = window.HTMLInputElement.prototype;
+  } else if (tag === 'TEXTAREA' && typeof window !== 'undefined' && window.HTMLTextAreaElement) {
+    proto = window.HTMLTextAreaElement.prototype;
+  }
+
+  const descriptor = proto ? Object.getOwnPropertyDescriptor(proto, 'value') : null;
+  if (descriptor && typeof descriptor.set === 'function') {
+    descriptor.set.call(el, val);
+  } else {
+    el.value = val;
+  }
+
+  el.dispatchEvent(new Event('input', { bubbles: true }));
+  el.dispatchEvent(new Event('change', { bubbles: true }));
+}
+
+// Full Pointer Event Sequence for High-Fidelity SPA Clicks
+function simulateClick(el) {
+  if (!el) return;
+  el.focus();
+  const rect = typeof el.getBoundingClientRect === 'function' ? el.getBoundingClientRect() : { left: 0, top: 0, width: 0, height: 0 };
+  const clientX = rect.left + (rect.width ? rect.width / 2 : 0);
+  const clientY = rect.top + (rect.height ? rect.height / 2 : 0);
+  const eventOpts = { bubbles: true, cancelable: true, view: typeof window !== 'undefined' ? window : null, clientX, clientY };
+
+  if (typeof PointerEvent !== 'undefined') {
+    try {
+      el.dispatchEvent(new PointerEvent('pointerdown', eventOpts));
+      el.dispatchEvent(new MouseEvent('mousedown', eventOpts));
+      el.dispatchEvent(new PointerEvent('pointerup', eventOpts));
+      el.dispatchEvent(new MouseEvent('mouseup', eventOpts));
+    } catch (e) {}
+  } else if (typeof MouseEvent !== 'undefined') {
+    try {
+      el.dispatchEvent(new MouseEvent('mousedown', eventOpts));
+      el.dispatchEvent(new MouseEvent('mouseup', eventOpts));
+    } catch (e) {}
+  }
+
+  if (typeof el.click === 'function') {
+    el.click();
+  }
+}
+
+// High-Risk Action Detection Safeguard
+const HIGH_RISK_KEYWORDS = [
+  'delete', 'remove', 'destroy', 'purge', 'drop', 'erase',
+  'pay', 'checkout', 'purchase', 'buy', 'transfer', 'wire',
+  'reset password', 'change password', 'wipe', 'terminate'
+];
+
+function isHighRiskAction(el, action) {
+  if (!action || !el) return false;
+  const act = String(action.action || '').toUpperCase();
+  if (act !== 'CLICK' && act !== 'TYPE') return false;
+
+  const textToCheck = [
+    el.textContent || '',
+    el.getAttribute ? (el.getAttribute('aria-label') || '') : '',
+    el.getAttribute ? (el.getAttribute('title') || '') : '',
+    el.getAttribute ? (el.getAttribute('name') || '') : '',
+    el.getAttribute ? (el.getAttribute('id') || '') : '',
+    el.value || '',
+    action.value || ''
+  ].join(' ').toLowerCase();
+
+  return HIGH_RISK_KEYWORDS.some((kw) => textToCheck.includes(kw));
 }
 
 // Global hook for script execution
@@ -828,18 +946,21 @@ if (typeof window !== 'undefined') {
   window.__DrishtiFirewall = {
     getStructuredDOM,
     processPII,
-    normalizeFirewallConfig
+    normalizeFirewallConfig,
+    setNativeInputValue,
+    simulateClick,
+    isHighRiskAction
   };
 }
 
-// Return the structured DOM when evaluated directly via executeScript
-if (typeof document !== 'undefined') {
+// Return the structured DOM when evaluated directly via executeScript (guard against offscreen execution)
+if (typeof document !== 'undefined' && (typeof window === 'undefined' || !window.location.href.includes('offscreen.html'))) {
   getStructuredDOM();
 }
 
 // Visual Highlighting for Agent Actions
-function highlightElement(el, actionType) {
-  if (!el) return;
+function highlightElement(el, actionType, isHighRisk = false) {
+  if (!el || typeof document === 'undefined') return;
   
   const rect = el.getBoundingClientRect();
   const overlay = document.createElement('div');
@@ -849,20 +970,25 @@ function highlightElement(el, actionType) {
   overlay.style.width = `${rect.width}px`;
   overlay.style.height = `${rect.height}px`;
   overlay.style.boxSizing = 'border-box';
-  overlay.style.border = '3px solid #22c55e'; // Green
-  overlay.style.backgroundColor = 'rgba(34, 197, 94, 0.2)';
-  overlay.style.borderRadius = getComputedStyle(el).borderRadius || '4px';
-  overlay.style.boxShadow = '0 0 15px rgba(34, 197, 94, 0.6)';
+  
+  const borderColor = isHighRisk ? '#f59e0b' : '#22c55e'; // Amber for high-risk, Green otherwise
+  const bgColor = isHighRisk ? 'rgba(245, 158, 11, 0.25)' : 'rgba(34, 197, 94, 0.2)';
+  const shadowColor = isHighRisk ? 'rgba(245, 158, 11, 0.6)' : 'rgba(34, 197, 94, 0.6)';
+
+  overlay.style.border = `3px solid ${borderColor}`;
+  overlay.style.backgroundColor = bgColor;
+  overlay.style.borderRadius = (typeof getComputedStyle === 'function' ? getComputedStyle(el).borderRadius : '') || '4px';
+  overlay.style.boxShadow = `0 0 15px ${shadowColor}`;
   overlay.style.pointerEvents = 'none';
   overlay.style.zIndex = '999999';
   overlay.style.transition = 'all 0.6s ease-out';
   
   const label = document.createElement('div');
-  label.textContent = `🤖 Agent: ${actionType}`;
+  label.textContent = isHighRisk ? `⚠️ Agent: ${actionType} (Sensitive)` : `🤖 Agent: ${actionType}`;
   label.style.position = 'absolute';
   label.style.top = '-26px';
   label.style.right = '0';
-  label.style.background = '#22c55e';
+  label.style.background = borderColor;
   label.style.color = '#fff';
   label.style.fontSize = '12px';
   label.style.fontWeight = 'bold';
@@ -890,7 +1016,11 @@ if (typeof module !== 'undefined' && module.exports) {
     normalizeFirewallConfig,
     DEFAULT_FIREWALL_CONFIG,
     isLuhnValid,
-    escapeRegex
+    escapeRegex,
+    setNativeInputValue,
+    simulateClick,
+    isHighRiskAction,
+    HIGH_RISK_KEYWORDS
   };
 }
 
