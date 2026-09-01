@@ -322,7 +322,7 @@ async function main() {
 
     const response = await fetch(`http://localhost:${port}/api/health`);
     const data = await response.json();
-    server.close();
+    await new Promise(resolve => server.close(resolve));
 
     assert.strictEqual(response.status, 200);
     assert.strictEqual(data.status, 'ok');
@@ -347,7 +347,7 @@ async function main() {
       })
     });
     const data = await response.json();
-    server.close();
+    await new Promise(resolve => server.close(resolve));
 
     assert.strictEqual(response.status, 200);
     assert.strictEqual(data.success, true);
@@ -369,7 +369,7 @@ async function main() {
       body: JSON.stringify({ url: 'http://test.com' })
     });
     const data = await response.json();
-    server.close();
+    await new Promise(resolve => server.close(resolve));
 
     assert.strictEqual(response.status, 400);
     assert.ok(data.error.includes('Missing structured DOM'));
@@ -429,7 +429,7 @@ async function main() {
   console.log('\n======================================================');
   console.log(`🎉 ALL ${passedTests}/${totalTests} TESTS PASSED SUCCESSFULLY!`);
   console.log('======================================================\n');
-  process.exit(0);
+  process.exitCode = 0;
 }
 
 main().catch(err => {
