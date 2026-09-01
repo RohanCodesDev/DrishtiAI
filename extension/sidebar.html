@@ -3,164 +3,250 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>DrishtiAI — Agentic Browser Assistant</title>
+  <title>DrishtiAI — Autonomous Browser Agent</title>
+  <link rel="stylesheet" href="lib/tabler-icons/tabler-icons.min.css">
   <link rel="stylesheet" href="sidebar.css">
 </head>
 <body>
-  <div class="sidebar-container">
-    
-    <!-- Header -->
-    <header class="header">
+  <div class="sidebar-container" id="app-root">
+
+    <!-- HEADER -->
+    <header class="header" role="banner">
       <div class="brand">
-        <div class="brand-logo-glow">🛡️</div>
-        <div class="brand-info">
-          <span class="brand-title">DrishtiAI</span>
-          <span class="brand-subtitle">Agentic Co-Pilot</span>
+        <div class="brand-logo" aria-hidden="true">
+          <i class="ti ti-eye-bolt"></i>
+        </div>
+        <div class="brand-text">
+          <span class="brand-name">DrishtiAI</span>
+          <span class="brand-tag">AGENT</span>
         </div>
       </div>
+
+      <!-- Live Dynamic Agent Status Indicator -->
+      <div class="header-center">
+        <div id="agent-status-badge" class="status-badge status-ready" title="Current Agent Status" aria-live="polite">
+          <span class="status-indicator-dot"></span>
+          <span id="agent-status-text" class="status-text">Ready</span>
+        </div>
+      </div>
+
+      <!-- Header Action Controls -->
       <div class="header-actions">
-        <button id="new-chat-btn" class="icon-btn-header" title="New Chat / Clear Conversation">
-          <span class="btn-icon">🧹</span>
+        <button id="new-chat-btn" class="icon-btn-header" title="New Chat / Clear Conversation" aria-label="New Chat">
+          <i class="ti ti-plus"></i>
         </button>
-        <button id="refresh-btn" class="icon-btn-header" title="Refresh Page Context & DOM">
-          <span class="btn-icon">🔄</span>
+        <button id="refresh-btn" class="icon-btn-header" title="Refresh Page Context & DOM" aria-label="Refresh Page Context">
+          <i class="ti ti-refresh"></i>
         </button>
-        <button id="settings-toggle-btn" class="btn btn-settings" title="Firewall & DOM Inspector">
-          <span class="gear-icon">⚙️</span>
-          <span class="btn-label">Settings</span>
+        <button id="settings-toggle-btn" class="icon-btn-header" title="Privacy Firewall & DOM Inspector" aria-label="Settings and Inspector">
+          <i class="ti ti-settings"></i>
         </button>
       </div>
     </header>
 
-    <!-- Page Context Bar -->
-    <div class="context-bar">
+    <!-- CURRENT PAGE CONTEXT BAR -->
+    <section class="context-bar" aria-label="Current Page Context">
       <div class="context-pill">
-        <span class="status-dot"></span>
-        <span class="page-title" id="page-title">Detecting active page...</span>
+        <div class="context-domain-icon" aria-hidden="true">
+          <i class="ti ti-world"></i>
+        </div>
+        <div class="context-details">
+          <span class="context-domain" id="page-domain">Detecting page...</span>
+          <span class="context-title" id="page-title">Detecting active page...</span>
+        </div>
       </div>
-      <span id="element-count-badge" class="count-badge">0 elements</span>
-    </div>
+      <button id="element-count-badge" class="count-badge" title="Click to inspect extracted DOM elements">
+        <span class="badge-dot"></span>
+        <span class="badge-text">0 elements</span>
+      </button>
+    </section>
 
-    <!-- Main Chat Workspace -->
-    <main class="chat-workspace" id="chat-workspace">
-      
-      <!-- Welcome / Empty State Screen -->
+    <!-- MAIN CHAT WORKSPACE -->
+    <main class="chat-workspace" id="chat-workspace" role="log" aria-label="Conversation Workspace">
+
+      <!-- WELCOME / EMPTY STATE SCREEN -->
       <div id="welcome-screen" class="welcome-screen">
-        <div class="welcome-icon-box">🤖</div>
-        <h2 class="welcome-heading">How can Drishti assist you?</h2>
-        <p class="welcome-subtext">Autonomous browser agent with on-device Privacy Firewall protection.</p>
-        
+        <div class="welcome-hero">
+          <div class="welcome-avatar-wrap">
+            <div class="welcome-icon-box">
+              <i class="ti ti-sparkles"></i>
+            </div>
+            <div class="welcome-glow-ring"></div>
+          </div>
+          <h1 class="welcome-heading">How can Drishti help on this page?</h1>
+          <p class="welcome-subtext">Autonomous AI browser agent equipped with on-device Privacy Firewall protection.</p>
+        </div>
+
         <div class="quick-prompts-group">
-          <div class="quick-prompts-title">Suggested Objectives:</div>
+          <div class="quick-prompts-header">
+            <span class="quick-prompts-title">Suggested Tasks</span>
+            <span class="quick-prompts-hint">Click to run or edit</span>
+          </div>
           <div class="quick-chips-grid">
-            <button class="quick-chip" data-prompt="Fill out the form fields with realistic mock data and submit.">
-              <span>✍️</span> Fill out form & submit
+            <button class="quick-chip" data-prompt="Fill out the form fields on this page with realistic mock data and submit." aria-label="Fill out form and submit">
+              <div class="chip-icon-wrap">
+                <i class="ti ti-forms"></i>
+              </div>
+              <div class="chip-content">
+                <span class="chip-title">Fill out form & submit</span>
+                <span class="chip-desc">Auto-detect input fields and complete action</span>
+              </div>
             </button>
-            <button class="quick-chip" data-prompt="Analyze the page for any exposed PII or sensitive credentials.">
-              <span>🛡️</span> Audit page privacy
+
+            <button class="quick-chip" data-prompt="Analyze this webpage for any exposed PII, credentials, or sensitive data." aria-label="Audit page privacy">
+              <div class="chip-icon-wrap">
+                <i class="ti ti-shield-lock"></i>
+              </div>
+              <div class="chip-content">
+                <span class="chip-title">Audit page privacy</span>
+                <span class="chip-desc">Scan for exposed PII or credential leaks</span>
+              </div>
             </button>
-            <button class="quick-chip" data-prompt="Click the primary call-to-action button on this page.">
-              <span>🎯</span> Click primary CTA
+
+            <button class="quick-chip" data-prompt="Find and click the primary call-to-action button on this page." aria-label="Click primary CTA">
+              <div class="chip-icon-wrap">
+                <i class="ti ti-pointer"></i>
+              </div>
+              <div class="chip-content">
+                <span class="chip-title">Click primary CTA</span>
+                <span class="chip-desc">Locate and trigger the primary action</span>
+              </div>
             </button>
-            <button class="quick-chip" data-prompt="Summarize the structure and main sections of this webpage.">
-              <span>📄</span> Summarize page
+
+            <button class="quick-chip" data-prompt="Summarize the structure and main sections of this webpage." aria-label="Summarize page">
+              <div class="chip-icon-wrap">
+                <i class="ti ti-file-description"></i>
+              </div>
+              <div class="chip-content">
+                <span class="chip-title">Summarize page</span>
+                <span class="chip-desc">Extract key sections and structural summary</span>
+              </div>
             </button>
           </div>
         </div>
       </div>
 
-      <!-- Message Stream -->
+      <!-- MESSAGE STREAM -->
       <div id="chat-messages" class="chat-messages" style="display: none;"></div>
 
-      <!-- Agent Activity Indicator -->
-      <div id="agent-activity-indicator" class="activity-indicator" style="display: none;">
-        <div class="activity-avatar">🤖</div>
-        <div class="activity-bubble">
-          <span class="pulse-dot"></span>
+      <!-- LIVE AGENT ACTIVITY INDICATOR -->
+      <div id="agent-activity-indicator" class="activity-indicator" style="display: none;" aria-live="polite">
+        <div class="activity-pill">
+          <div class="activity-spinner" aria-hidden="true"></div>
           <span id="activity-text" class="activity-text">Drishti is reasoning...</span>
         </div>
       </div>
     </main>
 
-    <!-- Bottom Chat Composer -->
-    <footer class="composer-container">
+    <!-- BOTTOM COMPOSER -->
+    <footer class="composer-container" role="region" aria-label="Task Composer">
       <div class="composer-card">
-        <textarea id="task-input" class="composer-textarea" placeholder="Give the agent an objective... (Enter to send, Shift+Enter for new line)" rows="2"></textarea>
-        
+        <div class="composer-input-row">
+          <textarea
+            id="task-input"
+            class="composer-textarea"
+            placeholder="Ask DrishtiAI to do something on this page... (Enter to send, Shift+Enter for newline)"
+            rows="1"
+            aria-label="Objective Input"
+          ></textarea>
+        </div>
+
         <div class="composer-toolbar">
           <div class="toolbar-left">
-            <label class="auto-loop-toggle" title="Automatically evaluate next steps up to 10 loops">
+            <label class="auto-loop-toggle" title="Automatically evaluate next browser steps iteratively (up to 10 loops)">
               <input type="checkbox" id="auto-loop-cb" checked>
-              <span class="loop-toggle-slider"></span>
+              <span class="loop-toggle-slider" aria-hidden="true"></span>
               <span class="loop-label">Auto-Loop</span>
             </label>
-            <span class="context-elements-hint" id="context-elements-hint">📄 Ready</span>
+            <span class="context-elements-hint" id="context-elements-hint">
+              <span class="hint-dot"></span>
+              <span class="hint-text">Page Ready</span>
+            </span>
           </div>
 
           <div class="toolbar-right">
-            <button id="stop-agent-btn" class="btn btn-danger btn-sm" disabled title="Stop running agent">
-              <span>⏹</span> Stop
+            <div class="mode-indicator" title="Autonomous Agent Mode Active">
+              <i class="ti ti-bolt"></i>
+              <span>Agent</span>
+            </div>
+
+            <!-- Dynamic Action Control Button (Run / Stop) -->
+            <button id="stop-agent-btn" class="btn-action-control btn-stop" disabled style="display: none;" title="Stop agent execution" aria-label="Stop running agent">
+              <i class="ti ti-player-stop-filled"></i>
+              <span>Stop</span>
             </button>
-            <button id="run-agent-btn" class="btn btn-primary btn-sm" title="Send objective to Agent">
-              <span>➤</span> Run
+
+            <button id="run-agent-btn" class="btn-action-control btn-run" title="Execute objective on current page" aria-label="Run Agent">
+              <i class="ti ti-arrow-up"></i>
+              <span>Run</span>
             </button>
           </div>
         </div>
       </div>
     </footer>
 
-    <!-- Slide-over / Modal Settings & Inspector Pane -->
-    <div id="settings-pane" class="settings-pane" aria-hidden="true">
+    <!-- SLIDE-OVER SETTINGS & INSPECTOR DRAWER -->
+    <div id="settings-pane" class="settings-pane" aria-hidden="true" role="dialog" aria-modal="true" aria-label="Settings and Inspector">
       <div class="settings-backdrop" id="settings-backdrop"></div>
       <div class="settings-content">
-        
-        <!-- Settings Header -->
+
+        <!-- Drawer Header -->
         <div class="settings-pane-header">
           <div class="pane-title-group">
-            <span class="pane-icon">⚙️</span>
-            <h3>Settings & Inspector</h3>
+            <div class="pane-icon" aria-hidden="true">
+              <i class="ti ti-adjustments"></i>
+            </div>
+            <h2>Settings & Inspector</h2>
           </div>
-          <button id="close-settings-btn" class="icon-btn" title="Close Settings">✕</button>
-        </div>
-
-        <!-- Tab Navigation Switcher -->
-        <div class="drawer-tabs-bar">
-          <button id="tab-btn-firewall" class="drawer-tab active" data-tab="firewall">
-            <span>🛡️</span> Privacy Firewall
-          </button>
-          <button id="tab-btn-dom" class="drawer-tab" data-tab="dom">
-            <span>📄</span> DOM JSON Inspector
+          <button id="close-settings-btn" class="icon-btn-header" title="Close Settings (Esc)" aria-label="Close Settings">
+            <i class="ti ti-x"></i>
           </button>
         </div>
 
-        <!-- TAB 1: Privacy Firewall -->
-        <div id="tab-content-firewall" class="tab-content active">
-          
+        <!-- Segmented Tab Bar Switcher -->
+        <div class="drawer-tabs-bar" role="tablist">
+          <button id="tab-btn-firewall" class="drawer-tab active" data-tab="firewall" role="tab" aria-selected="true" aria-controls="tab-content-firewall">
+            <i class="ti ti-shield-lock"></i>
+            <span>Privacy Firewall</span>
+          </button>
+          <button id="tab-btn-dom" class="drawer-tab" data-tab="dom" role="tab" aria-selected="false" aria-controls="tab-content-dom">
+            <i class="ti ti-code"></i>
+            <span>DOM Inspector</span>
+          </button>
+        </div>
+
+        <!-- TAB 1: PRIVACY FIREWALL -->
+        <div id="tab-content-firewall" class="tab-content active" role="tabpanel" aria-labelledby="tab-btn-firewall">
+
+          <!-- Firewall Status Summary -->
           <div class="firewall-summary-card">
             <div class="summary-card-left">
-              <span class="status-dot"></span>
+              <span class="status-shield-dot"></span>
               <span id="firewall-status-text">Shield Active: 10 / 10 Rules</span>
             </div>
             <div class="summary-card-pills">
-              <span class="tag-pill tag-bl" id="bl-count-pill">0 BL</span>
-              <span class="tag-pill tag-wl" id="wl-count-pill">0 WL</span>
+              <span class="tag-pill tag-bl" id="bl-count-pill" title="Active Blacklist Items">0 BL</span>
+              <span class="tag-pill tag-wl" id="wl-count-pill" title="Active Whitelist Items">0 WL</span>
             </div>
           </div>
 
-          <!-- Preset Action Buttons -->
+          <!-- Presets -->
           <div class="presets-row">
             <button id="preset-protect-all" class="preset-btn" title="Enable all built-in PII redactions">Protect All</button>
             <button id="preset-allow-all" class="preset-btn" title="Disable all built-in PII redactions">Allow All</button>
-            <button id="preset-reset" class="preset-btn" title="Reset all settings to default">Reset</button>
+            <button id="preset-reset" class="preset-btn" title="Reset all settings to default">Reset Defaults</button>
           </div>
 
           <!-- Built-in PII Detectors Section -->
           <div class="settings-section">
-            <div class="section-title">Built-in PII Detectors</div>
-            <div class="section-subtitle">Toggled ON = Redact and protect this data type locally on-device</div>
-            
+            <div class="section-header-row">
+              <div class="section-title">Built-in PII Detectors</div>
+              <span class="section-badge">On-Device</span>
+            </div>
+            <div class="section-subtitle">Data types toggled ON are redacted locally before context reaches the AI.</div>
+
             <div class="rules-list">
-              
+
               <label class="rule-item">
                 <div class="rule-info">
                   <span class="rule-name">Email Addresses</span>
@@ -182,7 +268,7 @@
               <label class="rule-item">
                 <div class="rule-info">
                   <span class="rule-name">Credit & Debit Cards</span>
-                  <span class="rule-desc">Visa, Mastercard, Amex, RuPay (Luhn check)</span>
+                  <span class="rule-desc">Visa, Mastercard, Amex, RuPay (Luhn checked)</span>
                 </div>
                 <input type="checkbox" class="rule-toggle" data-rule="credit_card" checked>
                 <span class="toggle-slider"></span>
@@ -217,7 +303,7 @@
 
               <label class="rule-item">
                 <div class="rule-info">
-                  <span class="rule-name">API Keys & JWT Secrets</span>
+                  <span class="rule-name">API Keys & Auth Tokens</span>
                   <span class="rule-desc">sk_live, ghp, Bearer tokens, eyJ...</span>
                 </div>
                 <input type="checkbox" class="rule-toggle" data-rule="api_key" checked>
@@ -257,11 +343,11 @@
           <!-- Custom Blacklist -->
           <div class="settings-section">
             <div class="section-title">Custom Blacklist (Always Redact)</div>
-            <div class="section-subtitle">Always mask matching terms as [BLACKLIST_REDACTED]</div>
-            
+            <div class="section-subtitle">Mask matching terms as [BLACKLIST_REDACTED]</div>
+
             <form id="blacklist-form" class="input-group">
               <input type="text" id="blacklist-input" class="text-input" placeholder="e.g. SecretProject, John Doe, /regex/i" autocomplete="off">
-              <button type="submit" class="btn btn-add" id="add-blacklist-btn">+ Add</button>
+              <button type="submit" class="btn-sm btn-accent" id="add-blacklist-btn">+ Add</button>
             </form>
 
             <div id="blacklist-tags" class="tags-list"></div>
@@ -271,10 +357,10 @@
           <div class="settings-section">
             <div class="section-title">Custom Whitelist (Always Allow)</div>
             <div class="section-subtitle">Preserve matching terms pristine (never redacted)</div>
-            
+
             <form id="whitelist-form" class="input-group">
               <input type="text" id="whitelist-input" class="text-input" placeholder="e.g. support@drishti.ai, public-key" autocomplete="off">
-              <button type="submit" class="btn btn-add" id="add-whitelist-btn">+ Add</button>
+              <button type="submit" class="btn-sm btn-accent" id="add-whitelist-btn">+ Add</button>
             </form>
 
             <div id="whitelist-tags" class="tags-list"></div>
@@ -282,28 +368,40 @@
 
         </div>
 
-        <!-- TAB 2: DOM JSON Inspector -->
-        <div id="tab-content-dom" class="tab-content">
-          
-          <!-- DOM Inspector Search & Action Bar -->
+        <!-- TAB 2: DOM JSON INSPECTOR -->
+        <div id="tab-content-dom" class="tab-content" role="tabpanel" aria-labelledby="tab-btn-dom">
+
+          <!-- DOM Inspector Search & Toolbar -->
           <div class="dom-inspector-toolbar">
             <div class="search-box-wrapper">
-              <span class="search-icon">🔍</span>
+              <i class="ti ti-search search-icon"></i>
               <input type="search" id="dom-search-input" class="dom-search-input" placeholder="Search tags, IDs, keys, values..." autocomplete="off">
               <span id="dom-search-count" class="search-match-count">0 matches</span>
             </div>
-            
+
             <div class="dom-toolbar-actions">
-              <button id="dom-search-prev-btn" class="btn btn-sm btn-icon-only" title="Previous match" disabled>▲</button>
-              <button id="dom-search-next-btn" class="btn btn-sm btn-icon-only" title="Next match" disabled>▼</button>
-              <button id="dom-copy-btn" class="btn btn-sm" title="Copy raw sanitized JSON">📋 Copy</button>
-              <button id="dom-refresh-btn" class="btn btn-sm" title="Re-extract DOM from active tab">🔄 Refresh</button>
+              <div class="nav-btn-group">
+                <button id="dom-search-prev-btn" class="btn-sm btn-icon" title="Previous match" disabled aria-label="Previous Match">
+                  <i class="ti ti-chevron-up"></i>
+                </button>
+                <button id="dom-search-next-btn" class="btn-sm btn-icon" title="Next match" disabled aria-label="Next Match">
+                  <i class="ti ti-chevron-down"></i>
+                </button>
+              </div>
+              <button id="dom-copy-btn" class="btn-sm btn-secondary" title="Copy raw sanitized JSON">
+                <i class="ti ti-copy"></i>
+                <span>Copy</span>
+              </button>
+              <button id="dom-refresh-btn" class="btn-sm btn-secondary" title="Re-extract DOM from active tab">
+                <i class="ti ti-refresh"></i>
+                <span>Refresh</span>
+              </button>
             </div>
           </div>
 
-          <!-- DOM Structure Container -->
+          <!-- Structured DOM View -->
           <div class="json-container" id="json-container">
-            <pre id="json-output">Loading structured DOM...</pre>
+            <pre id="json-output">Extracting structured DOM...</pre>
           </div>
 
         </div>

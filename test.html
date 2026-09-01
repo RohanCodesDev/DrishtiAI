@@ -28,7 +28,7 @@
             background-color: var(--bg-color);
             color: var(--text-main);
             line-height: 1.5;
-            padding: 40px 20px;
+            padding: 40px 20px 120px 20px;
         }
 
         .container {
@@ -342,51 +342,190 @@
             </div>
         </div>
 
-        <!-- OCR Box 4 -->
+    </div>
+
+    <!-- SECTION 3: LOCAL VISION & CANVAS GRAPHICS -->
+    <h2 class="section-title">👁️ 3. Local Vision & Graphic Element Testing</h2>
+    <div class="grid">
+        
+        <!-- Canvas Card 1: Confirmation Code -->
+        <div class="card">
+            <div class="card-header">
+                <span class="badge" style="background: #e5e7eb; color: #374151;">TEST: CONFIRMATION CODE</span>
+                <h3 class="card-title">Security Confirmation Code</h3>
+                <p class="card-desc">Rendered natively on a <code>&lt;canvas&gt;</code> element. Invisible to DOM scrapers.</p>
+            </div>
+            <div style="background: #f8fafc; border: 2px dashed #94a3b8; padding: 20px; border-radius: 8px; text-align: center; margin-top: 12px;">
+                <canvas id="ocr-test-canvas" width="380" height="90"></canvas>
+            </div>
+            <div style="display: flex; gap: 8px; margin-top: 16px;">
+                <button class="btn btn-secondary" style="flex: 1; font-size: 0.85rem; padding: 8px;" onclick="copyPrompt('What is the confirmation code?')">📋 Copy Prompt</button>
+                <button class="btn" style="background: #e2e8f0; color: #334155; font-size: 0.85rem; padding: 8px;" onclick="randomizeConfirmationCode()">🎲 Randomize</button>
+            </div>
+        </div>
+
+        <!-- Canvas Card 2: Security PIN Badge -->
+        <div class="card">
+            <div class="card-header">
+                <span class="badge" style="background: #dbeafe; color: #1e40af;">TEST: 2FA SECURITY BADGE</span>
+                <h3 class="card-title">Two-Factor PIN & Status</h3>
+                <p class="card-desc">Graphic authorization badge with security code & verification status.</p>
+            </div>
+            <div style="background: #eff6ff; border: 2px dashed #93c5fd; padding: 20px; border-radius: 8px; text-align: center; margin-top: 12px;">
+                <canvas id="security-pin-canvas" width="380" height="90"></canvas>
+            </div>
+            <div style="display: flex; gap: 8px; margin-top: 16px;">
+                <button class="btn btn-secondary" style="flex: 1; font-size: 0.85rem; padding: 8px;" onclick="copyPrompt('What is the security PIN and status?')">📋 Copy Prompt</button>
+                <button class="btn" style="background: #e2e8f0; color: #334155; font-size: 0.85rem; padding: 8px;" onclick="randomizeSecurityPin()">🎲 Randomize</button>
+            </div>
+        </div>
+
+        <!-- Canvas Card 3: Promo Voucher -->
         <div class="card" style="grid-column: 1 / -1;">
             <div class="card-header">
-                <span class="badge" style="background: #e5e7eb; color: #374151;">TEST: VISUAL OCR ENGINE (PHASE 10)</span>
-                <h3 class="card-title">Canvas / Image Obfuscation Test</h3>
-                <p class="card-desc">The following code is drawn natively onto a `<canvas>` element. It is completely invisible to the DOM Scraper. Ask the agent to "Read the confirmation code".</p>
+                <span class="badge" style="background: #fef3c7; color: #92400e;">TEST: PROMO VOUCHER BANNER</span>
+                <h3 class="card-title">VIP Discount & Voucher Graphic</h3>
+                <p class="card-desc">Promotional banner drawn onto canvas containing special coupon & discount rate.</p>
             </div>
-            <div style="background: #1e293b; padding: 24px; border-radius: 8px; text-align: center; margin-top: 16px;">
-                <canvas id="ocr-test-canvas" width="400" height="100"></canvas>
+            <div style="background: #fffbeb; border: 2px dashed #fcd34d; padding: 20px; border-radius: 8px; text-align: center; margin-top: 12px;">
+                <canvas id="voucher-canvas" width="450" height="90"></canvas>
+            </div>
+            <div style="display: flex; gap: 8px; margin-top: 16px;">
+                <button class="btn btn-secondary" style="flex: 1; font-size: 0.85rem; padding: 8px;" onclick="copyPrompt('What is the voucher discount code and discount percentage?')">📋 Copy Prompt</button>
+                <button class="btn" style="background: #e2e8f0; color: #334155; font-size: 0.85rem; padding: 8px;" onclick="randomizeVoucher()">🎲 Randomize</button>
             </div>
         </div>
 
     </div>
 
+    <!-- Toast Notification for Prompt Copying -->
+    <div id="toast" style="position: fixed; bottom: 24px; right: 24px; background: #0f172a; color: #ffffff; padding: 12px 20px; border-radius: 8px; font-size: 0.9rem; box-shadow: 0 10px 15px -3px rgba(0,0,0,0.3); display: none; z-index: 10000; align-items: center; gap: 8px;">
+        <span>✨</span> <span id="toast-msg">Prompt copied to clipboard!</span>
+    </div>
+
 </div>
 
 <script>
-    // Draw text onto canvas to hide it from DOM extraction
-    window.onload = () => {
-        const canvas = document.getElementById('ocr-test-canvas');
-        if (canvas) {
-            const ctx = canvas.getContext('2d');
-            
-            // Background
-            ctx.fillStyle = '#1e293b';
-            ctx.fillRect(0, 0, canvas.width, canvas.height);
-            
-            // Noise/Lines to simulate captcha/obfuscation
-            for(let i=0; i<5; i++) {
-                ctx.strokeStyle = `rgba(255, 255, 255, 0.1)`;
-                ctx.lineWidth = Math.random() * 3;
-                ctx.beginPath();
-                ctx.moveTo(Math.random() * canvas.width, Math.random() * canvas.height);
-                ctx.lineTo(Math.random() * canvas.width, Math.random() * canvas.height);
-                ctx.stroke();
-            }
+    // Canvas State Storage
+    let currentConfirmation = 'CONFIRMATION: 9948-AB';
+    let currentPin = '849201';
+    let currentVoucher = 'DRISHTI-VIP-2026';
+    let currentDiscount = '50% INSTANT DISCOUNT';
 
-            // Secret Text
-            ctx.fillStyle = '#10b981';
-            ctx.font = 'bold 32px "Courier New", Courier, monospace';
-            ctx.textAlign = 'center';
-            ctx.textBaseline = 'middle';
-            ctx.fillText('CONFIRMATION: 9948-AB', canvas.width/2, canvas.height/2);
+    function drawConfirmationCanvas() {
+        const canvas1 = document.getElementById('ocr-test-canvas');
+        if (canvas1) {
+            const ctx1 = canvas1.getContext('2d');
+            ctx1.fillStyle = '#ffffff';
+            ctx1.fillRect(0, 0, canvas1.width, canvas1.height);
+            ctx1.strokeStyle = '#cbd5e1';
+            ctx1.lineWidth = 2;
+            ctx1.strokeRect(1, 1, canvas1.width - 2, canvas1.height - 2);
+            ctx1.fillStyle = '#0f172a';
+            ctx1.font = 'bold 24px "Courier New", Courier, monospace';
+            ctx1.textAlign = 'center';
+            ctx1.textBaseline = 'middle';
+            ctx1.fillText(currentConfirmation, canvas1.width / 2, canvas1.height / 2);
         }
-    };
+    }
+
+    function drawSecurityPinCanvas() {
+        const canvas2 = document.getElementById('security-pin-canvas');
+        if (canvas2) {
+            const ctx2 = canvas2.getContext('2d');
+            ctx2.fillStyle = '#ffffff';
+            ctx2.fillRect(0, 0, canvas2.width, canvas2.height);
+            ctx2.strokeStyle = '#93c5fd';
+            ctx2.lineWidth = 2;
+            ctx2.strokeRect(1, 1, canvas2.width - 2, canvas2.height - 2);
+            
+            ctx2.fillStyle = '#1e40af';
+            ctx2.font = 'bold 22px "Courier New", Courier, monospace';
+            ctx2.textAlign = 'center';
+            ctx2.fillText(`SECURITY PIN: ${currentPin}`, canvas2.width / 2, 36);
+            
+            ctx2.fillStyle = '#059669';
+            ctx2.font = 'bold 15px -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif';
+            ctx2.fillText('STATUS: VERIFIED & ACTIVE', canvas2.width / 2, 66);
+        }
+    }
+
+    function drawVoucherCanvas() {
+        const canvas3 = document.getElementById('voucher-canvas');
+        if (canvas3) {
+            const ctx3 = canvas3.getContext('2d');
+            ctx3.fillStyle = '#ffffff';
+            ctx3.fillRect(0, 0, canvas3.width, canvas3.height);
+            ctx3.strokeStyle = '#fcd34d';
+            ctx3.lineWidth = 2;
+            ctx3.strokeRect(1, 1, canvas3.width - 2, canvas3.height - 2);
+            
+            ctx3.fillStyle = '#92400e';
+            ctx3.font = 'bold 22px "Courier New", Courier, monospace';
+            ctx3.textAlign = 'center';
+            ctx3.fillText(`VOUCHER: ${currentVoucher}`, canvas3.width / 2, 36);
+            
+            ctx3.fillStyle = '#dc2626';
+            ctx3.font = 'bold 15px -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif';
+            ctx3.fillText(`SPECIAL OFFER: ${currentDiscount}`, canvas3.width / 2, 66);
+        }
+    }
+
+    function drawAllCanvases() {
+        drawConfirmationCanvas();
+        drawSecurityPinCanvas();
+        drawVoucherCanvas();
+    }
+
+    // Dynamic Randomizers for Live Interactive Testing
+    function randomizeConfirmationCode() {
+        const num = Math.floor(1000 + Math.random() * 9000);
+        const letters = String.fromCharCode(65 + Math.floor(Math.random() * 26)) + String.fromCharCode(65 + Math.floor(Math.random() * 26));
+        currentConfirmation = `CONFIRMATION: ${num}-${letters}`;
+        drawConfirmationCanvas();
+        showToast(`New confirmation code drawn: ${num}-${letters}`);
+    }
+
+    function randomizeSecurityPin() {
+        currentPin = Math.floor(100000 + Math.random() * 900000).toString();
+        drawSecurityPinCanvas();
+        showToast(`New 2FA PIN drawn: ${currentPin}`);
+    }
+
+    function randomizeVoucher() {
+        const discounts = ['20% INSTANT DISCOUNT', '35% VIP REBATE', '50% SPECIAL SAVINGS', '75% FLASH SALE'];
+        const codes = ['DRISHTI-PREMIUM-2026', 'AEGIS-SUPER-DEAL', 'CYBER-PROMO-99', 'VISION-SPECIAL-2026'];
+        currentVoucher = codes[Math.floor(Math.random() * codes.length)];
+        currentDiscount = discounts[Math.floor(Math.random() * discounts.length)];
+        drawVoucherCanvas();
+        showToast(`New voucher graphic generated: ${currentVoucher}`);
+    }
+
+    function copyPrompt(text) {
+        navigator.clipboard.writeText(text).then(() => {
+            showToast(`Copied objective: "${text}"`);
+        });
+    }
+
+    function showToast(msg) {
+        const toast = document.getElementById('toast');
+        const toastMsg = document.getElementById('toast-msg');
+        if (toast && toastMsg) {
+            toastMsg.textContent = msg;
+            toast.style.display = 'flex';
+            clearTimeout(window.__toastTimeout);
+            window.__toastTimeout = setTimeout(() => {
+                toast.style.display = 'none';
+            }, 3000);
+        }
+    }
+
+    if (document.readyState !== 'loading') {
+        drawAllCanvases();
+    } else {
+        document.addEventListener('DOMContentLoaded', drawAllCanvases);
+        window.addEventListener('load', drawAllCanvases);
+    }
 </script>
 </body>
 </html>

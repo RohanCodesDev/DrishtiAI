@@ -327,7 +327,7 @@ const SEMANTIC_TAGS = new Set([
   'FORM', 'FIELDSET', 'LEGEND', 'TABLE', 'THEAD', 'TBODY', 'TFOOT', 'TR', 'TH', 'TD',
   'UL', 'OL', 'LI', 'DL', 'DT', 'DD', 'DIALOG', 'DETAILS', 'SUMMARY',
   'FIGURE', 'FIGCAPTION', 'BLOCKQUOTE', 'H1', 'H2', 'H3', 'H4', 'H5', 'H6',
-  'P', 'PRE', 'CODE', 'LABEL', 'IMG', 'A', 'BUTTON', 'INPUT', 'TEXTAREA', 'SELECT', 'OPTION'
+  'P', 'PRE', 'CODE', 'LABEL', 'IMG', 'CANVAS', 'A', 'BUTTON', 'INPUT', 'TEXTAREA', 'SELECT', 'OPTION'
 ]);
 
 const INTERACTIVE_TAGS = new Set([
@@ -485,6 +485,14 @@ function extractAttributes(el, tag, config) {
     if (alt) attrs.alt = alt.trim();
     const src = el.getAttribute('src');
     if (src) attrs.src = src.trim();
+  } else if (tag === 'CANVAS') {
+    if (el.id) attrs.id = el.id;
+    const width = el.width || el.getAttribute('width');
+    if (width) attrs.width = width;
+    const height = el.height || el.getAttribute('height');
+    if (height) attrs.height = height;
+    const ariaLabel = el.getAttribute('aria-label') || el.getAttribute('title');
+    if (ariaLabel) attrs.label = ariaLabel;
   } else if (tag === 'FORM') {
     const name = el.getAttribute('name');
     if (name) attrs.name = name;
@@ -654,6 +662,27 @@ async function getStructuredDOM(overrideConfig = null) {
   const rawTree = document.body ? buildTree(document.body, config) : null;
   const { root, elementCount } = rawTree ? assignIds(rawTree) : { root: null, elementCount: 0 };
 
+  // Extract visible canvas graphic elements for direct high-resolution vision decoding
+  const canvases = [];
+  if (typeof document !== 'undefined') {
+    const canvasElements = Array.from(document.querySelectorAll('canvas')).filter(isElementVisible);
+    for (const c of canvasElements) {
+      try {
+        const dataUrl = c.toDataURL('image/png');
+        if (dataUrl && dataUrl.length > 50) {
+          canvases.push({
+            id: c.id || c.dataset?.drishtiId || 'canvas',
+            dataUrl: dataUrl,
+            width: c.width,
+            height: c.height
+          });
+        }
+      } catch (e) {
+        // Tainted canvas gracefully skipped
+      }
+    }
+  }
+
   return {
     url: window.location.href,
     title: document.title,
@@ -661,6 +690,7 @@ async function getStructuredDOM(overrideConfig = null) {
     firewall_active_rules: Object.keys(config.rules).filter((k) => config.rules[k]).length,
     custom_blacklist_count: config.custom_blacklist.length,
     custom_whitelist_count: config.custom_whitelist.length,
+    canvases: canvases,
     root: root
   };
 }
@@ -714,28 +744,73 @@ if (typeof chrome !== 'undefined' && chrome.runtime && chrome.runtime.onMessage 
       }
 
       try {
-        if (targetElement) highlightElement(targetElement, ai.action);
-
         switch (ai.action) {
           case 'CLICK':
-            targetElement.focus();
-            targetElement.click();
+            if (targetElement) {
+              targetElement.focus();
+              targetElement.click();
+              highlightElement(targetElement, ai.action);
+            }
             break;
           case 'TYPE':
-            targetElement.focus();
-            targetElement.value = ai.value || '';
-            targetElement.dispatchEvent(new Event('input', { bubbles: true }));
-            targetElement.dispatchEvent(new Event('change', { bubbles: true }));
+            if (targetElement) {
+              targetElement.focus();
+              targetElement.value = ai.value || '';
+              targetElement.dispatchEvent(new Event('input', { bubbles: true }));
+              targetElement.dispatchEvent(new Event('change', { bubbles: true }));
+              highlightElement(targetElement, ai.action);
+            }
             break;
           case 'NAVIGATE':
             if (ai.value) window.location.href = ai.value;
             break;
-          case 'SCROLL':
-            if (targetElement) {
-              targetElement.scrollIntoView({ behavior: 'instant', block: 'center' });
+          case 'SCROLL': {
+            const val = (ai.value || '').toString().toLowerCase().trim();
+            const scrollAmount = Math.max(window.innerHeight * 0.85, 750);
+            
+            // Resolve semantic container card if targetElement is inside one
+            const isBodyOrHtml = targetElement === document.body || targetElement === document.documentElement;
+            const container = (targetElement && !isBodyOrHtml) 
+              ? (targetElement.closest('.card, section, form, article, fieldset, main, table') || targetElement)
+              : null;
+
+            if (val === 'top') {
+              window.scrollTo({ top: 0, behavior: 'instant' });
+              if (document.documentElement) document.documentElement.scrollTop = 0;
+            } else if (val === 'bottom') {
+              window.scrollTo({ top: 999999, behavior: 'instant' });
+              if (document.documentElement) document.documentElement.scrollTop = 999999;
+              if (document.body) document.body.scrollTop = 999999;
+            } else if (val === 'down') {
+              if (container && container !== document.body) {
+                container.scrollIntoView({ behavior: 'instant', block: 'end', inline: 'nearest' });
+                window.scrollBy({ top: 250, behavior: 'instant' });
+              } else {
+                window.scrollBy({ top: scrollAmount, behavior: 'instant' });
+              }
+            } else if (val === 'up') {
+              if (container && container !== document.body) {
+                container.scrollIntoView({ behavior: 'instant', block: 'start', inline: 'nearest' });
+                window.scrollBy({ top: -100, behavior: 'instant' });
+              } else {
+                window.scrollBy({ top: -scrollAmount, behavior: 'instant' });
+              }
+            } else if (!isNaN(Number(val)) && val !== '') {
+              window.scrollBy({ top: Number(val), behavior: 'instant' });
+            } else if (container && container !== document.body) {
+              container.scrollIntoView({ behavior: 'instant', block: 'center', inline: 'nearest' });
+              window.scrollBy({ top: 200, behavior: 'instant' });
             } else {
-              window.scrollBy({ top: ai.value === 'up' ? -800 : 800, behavior: 'instant' });
+              window.scrollBy({ top: scrollAmount, behavior: 'instant' });
             }
+
+            if (targetElement) {
+              setTimeout(() => highlightElement(targetElement, ai.action), 50);
+            }
+            break;
+          }
+          default:
+            if (targetElement) highlightElement(targetElement, ai.action);
             break;
         }
         sendResponse({ success: true });
@@ -768,23 +843,24 @@ function highlightElement(el, actionType) {
   
   const rect = el.getBoundingClientRect();
   const overlay = document.createElement('div');
-  overlay.style.position = 'fixed';
-  overlay.style.top = `${rect.top}px`;
-  overlay.style.left = `${rect.left}px`;
+  overlay.style.position = 'absolute';
+  overlay.style.top = `${window.scrollY + rect.top}px`;
+  overlay.style.left = `${window.scrollX + rect.left}px`;
   overlay.style.width = `${rect.width}px`;
   overlay.style.height = `${rect.height}px`;
+  overlay.style.boxSizing = 'border-box';
   overlay.style.border = '3px solid #22c55e'; // Green
   overlay.style.backgroundColor = 'rgba(34, 197, 94, 0.2)';
   overlay.style.borderRadius = getComputedStyle(el).borderRadius || '4px';
   overlay.style.boxShadow = '0 0 15px rgba(34, 197, 94, 0.6)';
   overlay.style.pointerEvents = 'none';
   overlay.style.zIndex = '999999';
-  overlay.style.transition = 'all 0.5s ease-out';
+  overlay.style.transition = 'all 0.6s ease-out';
   
   const label = document.createElement('div');
   label.textContent = `🤖 Agent: ${actionType}`;
   label.style.position = 'absolute';
-  label.style.top = '-25px';
+  label.style.top = '-26px';
   label.style.right = '0';
   label.style.background = '#22c55e';
   label.style.color = '#fff';
@@ -798,12 +874,23 @@ function highlightElement(el, actionType) {
   document.body.appendChild(overlay);
   
   setTimeout(() => {
-    overlay.style.transform = 'scale(1.1)';
+    overlay.style.transform = 'scale(1.03)';
     overlay.style.opacity = '0';
-  }, 500);
+  }, 700);
   
   setTimeout(() => {
     if (overlay.parentNode) overlay.parentNode.removeChild(overlay);
-  }, 1000);
+  }, 1400);
+}
+
+// Node.js environment export for automated testing
+if (typeof module !== 'undefined' && module.exports) {
+  module.exports = {
+    processPII,
+    normalizeFirewallConfig,
+    DEFAULT_FIREWALL_CONFIG,
+    isLuhnValid,
+    escapeRegex
+  };
 }
 

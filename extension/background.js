@@ -1,32 +1,42 @@
-// Setup Offscreen Document (for future Phase 10 Vision)
+// Setup Offscreen Document (for Phase 10 Vision & Local OCR)
 const OFFSCREEN_DOCUMENT_PATH = 'offscreen.html';
+let creatingOffscreenPromise = null;
 
-async function setupOffscreenDocument() {
-  // Firefox doesn't support chrome.offscreen, but Chrome MV3 requires it for DOM/Canvas.
-  if (typeof chrome !== 'undefined' && chrome.offscreen) {
-    try {
-      const existingContexts = await chrome.runtime.getContexts({
-        contextTypes: ['OFFSCREEN_DOCUMENT'],
-        documentUrls: [chrome.runtime.getURL(OFFSCREEN_DOCUMENT_PATH)]
-      });
-      
-      if (existingContexts.length > 0) {
-        return; // Already exists
-      }
-      
-      await chrome.offscreen.createDocument({
-        url: OFFSCREEN_DOCUMENT_PATH,
-        reasons: ['DOM_PARSER', 'WORKERS'], 
-        justification: 'Required for future local vision processing and canvas rendering.'
-      });
-    } catch (err) {
+async function ensureOffscreenDocument() {
+  if (typeof chrome === 'undefined' || !chrome.offscreen) return;
+
+  try {
+    const existingContexts = await chrome.runtime.getContexts({
+      contextTypes: ['OFFSCREEN_DOCUMENT'],
+      documentUrls: [chrome.runtime.getURL(OFFSCREEN_DOCUMENT_PATH)]
+    });
+    if (existingContexts && existingContexts.length > 0) return;
+  } catch (e) {
+    // Continue to creation attempt if context lookup fails
+  }
+
+  if (creatingOffscreenPromise) {
+    await creatingOffscreenPromise;
+    return;
+  }
+
+  creatingOffscreenPromise = chrome.offscreen.createDocument({
+    url: OFFSCREEN_DOCUMENT_PATH,
+    reasons: ['WORKERS', 'BLOBS', 'DOM_SCRAPING'],
+    justification: 'Required for local vision processing, OCR, and canvas rendering without cloud transmission.'
+  }).catch((err) => {
+    if (!err.message || !err.message.includes('Only a single offscreen document')) {
       console.error('Failed to create offscreen document:', err);
     }
-  }
+  }).finally(() => {
+    creatingOffscreenPromise = null;
+  });
+
+  await creatingOffscreenPromise;
 }
 
-// Initialize offscreen doc
-setupOffscreenDocument();
+// Pre-warm offscreen doc at startup
+ensureOffscreenDocument().catch(() => {});
 
 
 // DrishtiAI Background Service Worker
@@ -34,10 +44,6 @@ setupOffscreenDocument();
 
 // Automatically open the side panel when the user clicks the extension icon
 if (typeof chrome !== 'undefined' && chrome.sidePanel) {
-  chrome.sidePanel
-    .setPanelBehavior({ openPanelOnActionClick: true })
-    .catch((err) => console.error('DrishtiAI: Failed to set panel behavior:', err));
-} else if (typeof chrome !== 'undefined' && chrome.sidePanel) {
   chrome.sidePanel
     .setPanelBehavior({ openPanelOnActionClick: true })
     .catch((err) => console.error('DrishtiAI: Failed to set panel behavior:', err));
@@ -89,6 +95,7 @@ async function getTabDOM(targetTabId, config = null) {
       url: tabUrl || 'chrome://newtab',
       element_count: 1,
       is_restricted: true,
+      canvases: [],
       root: {
         id: 'drishti-restricted-root',
         tag: 'BODY',
@@ -159,6 +166,7 @@ async function getTabDOM(targetTabId, config = null) {
       title: tabUrl || 'Browser Tab',
       url: tabUrl,
       element_count: 1,
+      canvases: [],
       root: {
         id: 'drishti-fallback-root',
         tag: 'BODY',
@@ -173,46 +181,107 @@ async function getTabDOM(targetTabId, config = null) {
   throw new Error('NO_DOM_DATA_RETURNED');
 }
 
+// Helper: Handshake with offscreen document to ensure message listeners are active
+async function pingOffscreenDocument(maxRetries = 5, retryDelayMs = 150) {
+  for (let attempt = 0; attempt < maxRetries; attempt++) {
+    try {
+      const pingRes = await new Promise((resolve) => {
+        chrome.runtime.sendMessage({ target: 'offscreen', type: 'PING' }, (res) => {
+          if (chrome.runtime.lastError) resolve(null);
+          else resolve(res);
+        });
+      });
+      if (pingRes && pingRes.success) return true;
+    } catch (e) {}
+    if (attempt < maxRetries - 1) {
+      await new Promise((r) => setTimeout(r, retryDelayMs));
+    }
+  }
+  return false;
+}
+
+// Helper: Synchronize screenshot capture and offscreen OCR worker processing
+async function captureAndRunOCR(targetTabId, config = null, canvases = []) {
+  try {
+    console.log('[DrishtiAI Background] 👁️ Step 2/3: Initializing Offscreen OCR Engine...');
+    await ensureOffscreenDocument();
+    await pingOffscreenDocument(5, 150);
+
+    let targetWindowId = null;
+    if (targetTabId) {
+      const tab = await chrome.tabs.get(targetTabId).catch(() => null);
+      if (tab && tab.windowId !== undefined) {
+        targetWindowId = tab.windowId;
+      }
+    }
+
+    console.log('[DrishtiAI Background] 📸 Step 2/3: Capturing visible viewport screenshot...');
+    const dataUrl = await chrome.tabs.captureVisibleTab(targetWindowId, { format: 'png' });
+    if (!dataUrl && (!canvases || canvases.length === 0)) {
+      console.warn('[DrishtiAI Background] Screenshot capture returned empty.');
+      return '(No visual screenshot available)';
+    }
+
+    console.log('[DrishtiAI Background] ⏳ Step 3/3: Running Tesseract OCR in Offscreen Worker...');
+    const ocrPromise = new Promise((resolve) => {
+      chrome.runtime.sendMessage({
+        target: 'offscreen',
+        type: 'RUN_OCR',
+        dataUrl: dataUrl,
+        canvases: canvases,
+        config: config
+      }, (res) => {
+        if (chrome.runtime.lastError) {
+          const lastErrMsg = chrome.runtime.lastError.message || 'Offscreen document connection error';
+          console.warn('[DrishtiAI Background] Offscreen OCR runtime error:', lastErrMsg);
+          resolve({ success: false, error: lastErrMsg });
+        } else {
+          resolve(res || { success: false, error: 'Empty response from offscreen OCR worker' });
+        }
+      });
+    });
+
+    const timeoutPromise = new Promise((resolve) => {
+      setTimeout(() => {
+        console.warn('[DrishtiAI Background] ⏱️ OCR processing timed out after 25s.');
+        resolve({ success: false, error: 'OCR processing timed out after 25s' });
+      }, 25000);
+    });
+
+    const ocrResponse = await Promise.race([ocrPromise, timeoutPromise]);
+
+    if (ocrResponse && ocrResponse.success && ocrResponse.text) {
+      console.log(`[DrishtiAI Background] ✨ OCR Success! Recognized ${ocrResponse.text.length} chars (Confidence: ${Math.round(ocrResponse.confidence || 0)}%)`);
+      return ocrResponse.text;
+    } else if (ocrResponse && ocrResponse.success && !ocrResponse.text) {
+      console.log('[DrishtiAI Background] ✨ OCR Completed: No text detected on screen.');
+      return '(No visual text detected on screen)';
+    } else {
+      console.warn('[DrishtiAI Background] ⚠️ OCR Failed:', ocrResponse?.error);
+      return '(OCR processing failed: ' + (ocrResponse?.error || 'Unknown error') + ')';
+    }
+  } catch (visionErr) {
+    console.warn('[DrishtiAI Background] Vision OCR skipped or failed:', visionErr.message);
+    return '(OCR capture skipped: ' + visionErr.message + ' - NOTE: If testing on a local file, ensure "Allow access to file URLs" is enabled in chrome://extensions for DrishtiAI)';
+  }
+}
+
 // Listen for messages from tab-specific sidebar
 chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
   if (message && (message.type === 'GET_DOM' || message.type === 'GET_PAGE_CONTEXT')) {
     (async () => {
       try {
+        console.log(`\n[DrishtiAI Background] 📥 Step 1/3: Extracting DOM & Context for Tab #${message.tabId}...`);
         const domData = await getTabDOM(message.tabId, message.config);
         
-        // Capture Screenshot and Run OCR if not on restricted page
         if (!domData.is_restricted) {
-          try {
-            const dataUrl = await chrome.tabs.captureVisibleTab(null, { format: 'png' });
-            
-            if (dataUrl) {
-              const ocrResponse = await new Promise((resolve) => {
-                chrome.runtime.sendMessage({
-                  target: 'offscreen',
-                  type: 'RUN_OCR',
-                  dataUrl: dataUrl
-                }, (res) => {
-                  if (chrome.runtime.lastError) {
-                    resolve(null);
-                  } else {
-                    resolve(res);
-                  }
-                });
-              });
-
-              if (ocrResponse && ocrResponse.success && ocrResponse.text) {
-                domData.visual_context = ocrResponse.text;
-              } else {
-                domData.visual_context = "(No visual text detected or OCR failed)";
-              }
-            }
-          } catch (visionErr) {
-            console.warn('Vision OCR skipped or failed:', visionErr.message);
-          }
+          domData.visual_context = await captureAndRunOCR(message.tabId, message.config, domData.canvases);
         }
-
+        
+        console.log(`[DrishtiAI Background] ✅ Context Packaged: ${domData.element_count} elements, OCR text length: ${domData.visual_context?.length || 0}`);
         sendResponse({ success: true, data: domData });
       } catch (err) {
+        console.error('[DrishtiAI Background] ❌ Context Extraction Failed:', err.message);
         sendResponse({
           success: false,
           error: err.code || 'DOM_EXTRACTION_ERROR',
@@ -252,6 +321,9 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
                 });
               });
               if (response && response.success && response.data) {
+                if (!response.data.is_restricted) {
+                  response.data.visual_context = await captureAndRunOCR(tabId, message.config, response.data.canvases);
+                }
                 sendResponse({ success: true, data: response.data });
                 return;
               }
@@ -261,6 +333,9 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
           }
         }
         const domData = await getTabDOM(tabId, message.config);
+        if (!domData.is_restricted) {
+          domData.visual_context = await captureAndRunOCR(tabId, message.config, domData.canvases);
+        }
         sendResponse({ success: true, data: domData });
       } catch (err) {
         sendResponse({

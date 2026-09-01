@@ -375,6 +375,57 @@ async function main() {
     assert.ok(data.error.includes('Missing structured DOM'));
   });
 
+  // TEST 7: Multimodal Visual OCR & LangGraph Reasoning
+  console.log('\n--- TEST GROUP 7: Multimodal Visual OCR & LangGraph Reasoning ---');
+  runTest('Prompt builder formats and truncates large visual OCR context', () => {
+    const domWithOcr = {
+      ...sampleSanitizedDom,
+      visual_context: '[CANVAS GRAPHIC #ocr-test-canvas]:\nCONFIRMATION: 9948-AB\nSTATUS: ACTIVE'
+    };
+    const prompt = buildUserPrompt(domWithOcr, 'Read the confirmation code from the screen');
+    assert.ok(prompt.includes('VISUAL OCR DATA'));
+    assert.ok(prompt.includes('CONFIRMATION: 9948-AB'));
+
+    const hugeOcr = {
+      ...sampleSanitizedDom,
+      visual_context: 'X'.repeat(4000)
+    };
+    const truncatedPrompt = buildUserPrompt(hugeOcr, 'Analyze');
+    assert.ok(truncatedPrompt.includes('[truncated]'));
+  });
+
+  await runAsyncTest('LangGraph reasons over visual OCR context to answer canvas-only queries', async () => {
+    if (!process.env.GROQ_API_KEY) return;
+
+    const payload = {
+      url: 'http://localhost:8080/test.html',
+      title: 'DRISHTI AI — Demo Environment',
+      element_count: 8,
+      root: {
+        id: 'element_0',
+        tag: 'body',
+        children: [
+          {
+            id: 'element_canvas_1',
+            tag: 'canvas',
+            attributes: { id: 'ocr-test-canvas' }
+          }
+        ]
+      },
+      visual_context: '[CANVAS GRAPHIC #ocr-test-canvas]:\nCONFIRMATION: 9948-AB',
+      userTask: 'What is the confirmation code displayed in the canvas graphic on this page?',
+      actionHistory: [],
+      loopCount: 1
+    };
+
+    const finalState = await runAgentGraph(payload);
+    assert.ok(finalState.validatedActions.length >= 1);
+    const action = finalState.validatedActions[0];
+    assert.ok(action.action === 'REPLY' || action.action === 'DONE');
+    assert.ok(action.value && (action.value.includes('9948-AB') || action.value.includes('9948')));
+    console.log(`     -> Visual OCR Reasoning Answer: ${action.value}`);
+  });
+
   console.log('\n======================================================');
   console.log(`🎉 ALL ${passedTests}/${totalTests} TESTS PASSED SUCCESSFULLY!`);
   console.log('======================================================\n');

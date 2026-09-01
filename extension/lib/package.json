@@ -11,6 +11,7 @@
   "license": "ISC",
   "type": "commonjs",
   "dependencies": {
+    "@tabler/icons-webfont": "^3.46.0",
     "tesseract.js": "^7.0.0"
   }
 }
