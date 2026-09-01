@@ -28,26 +28,34 @@ app.post('/api/analyze', async (req, res) => {
       return res.status(400).json({ error: 'Invalid payload: Missing structured DOM.' });
     }
 
-    console.log(`\n--- Received New Page Context for Analysis ---`);
-    console.log(`URL: ${sanitizedData.url}`);
-    console.log(`Title: ${sanitizedData.title}`);
-    console.log(`Elements: ${sanitizedData.element_count}`);
-    console.log(`Firewall Active Rules: ${sanitizedData.firewall_active_rules}`);
+    const timestamp = new Date().toLocaleTimeString();
+    console.log(`\n======================================================`);
+    console.log(`[DrishtiAI Backend ${timestamp}] 📥 Received Page Context for Analysis`);
+    console.log(`  🌐 URL: ${sanitizedData.url}`);
+    console.log(`  📑 Title: ${sanitizedData.title}`);
+    console.log(`  🧩 Elements: ${sanitizedData.element_count}`);
+    console.log(`  🛡️ Firewall Active Rules: ${sanitizedData.firewall_active_rules}`);
+    
     if (sanitizedData.visual_context) {
-      console.log(`Visual OCR Text: "${sanitizedData.visual_context.replace(/\n+/g, ' ').trim()}"`);
+      const summary = sanitizedData.visual_context.replace(/\n+/g, ' ').trim();
+      console.log(`  👁️ Visual OCR Text: "${summary.length > 200 ? summary.slice(0, 200) + '...' : summary}"`);
+      if (Array.isArray(sanitizedData.canvases) && sanitizedData.canvases.length > 0) {
+        console.log(`  🎨 Canvas Graphics Detected: ${sanitizedData.canvases.length} ([${sanitizedData.canvases.map(c => c.id).join(', ')}])`);
+      }
     } else {
-      console.log(`Visual OCR Text: NOT PROVIDED`);
+      console.log(`  👁️ Visual OCR Text: (No OCR text provided)`);
     }
     
     // Initialize Groq SDK (requires process.env.GROQ_API_KEY)
     if (!process.env.GROQ_API_KEY) {
+      console.error('❌ [DrishtiAI Backend] GROQ_API_KEY is missing from backend/.env');
       return res.status(500).json({ error: 'GROQ_API_KEY is missing from backend/.env' });
     }
 
     const groq = new Groq({ apiKey: process.env.GROQ_API_KEY });
     
-    console.log('--- Querying Groq... ---');
-    console.log(`User Task: ${sanitizedData.userTask || 'None'}`);
+    console.log(`\n[DrishtiAI Backend] 🤖 Querying Groq (openai/gpt-oss-20b)...`);
+    console.log(`  🎯 User Task: "${sanitizedData.userTask || 'None'}"`);
     const userPrompt = buildUserPrompt(sanitizedData, sanitizedData.userTask, sanitizedData.actionHistory);
 
     const chatCompletion = await groq.chat.completions.create({
@@ -76,11 +84,12 @@ app.post('/api/analyze', async (req, res) => {
     try {
       aiAction = JSON.parse(responseText);
     } catch (parseErr) {
-      console.error('Failed to parse Groq JSON output:', responseText);
+      console.error('❌ [DrishtiAI Backend] Failed to parse Groq JSON output:', responseText);
       aiAction = { action: 'WAIT', reason: 'Failed to parse AI output', raw: responseText };
     }
 
-    console.log('--- Responding with Action ---', aiAction);
+    console.log(`[DrishtiAI Backend] ⚡ Responding with Action:`, JSON.stringify(aiAction, null, 2));
+    console.log(`======================================================\n`);
     res.json({ success: true, ai_response: aiAction });
 
   } catch (error) {

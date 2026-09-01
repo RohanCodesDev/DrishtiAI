@@ -25,6 +25,7 @@
   const firewallStatusText = document.getElementById('firewall-status-text');
   const blCountPill = document.getElementById('bl-count-pill');
   const wlCountPill = document.getElementById('wl-count-pill');
+  const ocrCountPill = document.getElementById('ocr-count-pill');
 
   // Preset Buttons
   const presetProtectAll = document.getElementById('preset-protect-all');
@@ -258,6 +259,19 @@
     countBadge.textContent = `${data.element_count || 0} elements`;
     currentJsonText = JSON.stringify(data, null, 2);
     jsonOutput.textContent = currentJsonText;
+
+    if (ocrCountPill) {
+      const canvasCount = Array.isArray(data?.canvases) ? data.canvases.length : 0;
+      if (data && data.visual_context && !data.visual_context.startsWith('(')) {
+        ocrCountPill.className = 'tag-pill tag-ocr synced';
+        ocrCountPill.textContent = canvasCount > 0 ? `👁️ OCR (${canvasCount} Canvas)` : '👁️ OCR Synced';
+        ocrCountPill.title = `Local Vision OCR synchronized: ${canvasCount} canvas graphic(s), ${data.visual_context.length} chars`;
+      } else {
+        ocrCountPill.className = 'tag-pill tag-ocr';
+        ocrCountPill.textContent = canvasCount > 0 ? `👁️ ${canvasCount} Canvas` : '👁️ OCR Active';
+        ocrCountPill.title = data?.visual_context || 'Local Vision OCR Engine Ready';
+      }
+    }
   }
 
   // Extract and render DOM JSON strictly for the bound tab
@@ -300,7 +314,7 @@
       let isResNull = false;
       let isResUndefined = false;
 
-      const response = await new Promise((resolve) => {
+      const getDomPromise = new Promise((resolve) => {
         chrome.runtime.sendMessage({
           type: 'GET_DOM',
           tabId: tabId,
@@ -313,12 +327,24 @@
           if (chrome.runtime.lastError) {
             caughtLastError = chrome.runtime.lastError.message || JSON.stringify(chrome.runtime.lastError);
             console.error("Native Messaging Error:", chrome.runtime.lastError);
-            resolve(res); // resolve with res anyway so we can see what it is
+            resolve(res || { success: false, error: caughtLastError });
           } else {
             resolve(res);
           }
         });
       });
+
+      const timeoutPromise = new Promise((resolve) => {
+        setTimeout(() => {
+          resolve({
+            success: false,
+            error: 'TIMEOUT',
+            message: 'DOM extraction timed out after 20s. Please ensure tab is responsive.'
+          });
+        }, 20000);
+      });
+
+      const response = await Promise.race([getDomPromise, timeoutPromise]);
 
       if (debugErrorBanner) {
         debugErrorBanner.style.display = 'none';
@@ -515,7 +541,7 @@
 
         if (!currentJsonText) return;
         
-        const userTask = taskInput.value.trim();
+        const userTask = taskInput.value.trim().replace(/^["']+|["']+$/g, '').trim();
         if (!userTask) {
           alert('Please enter an objective for the agent.');
           return;

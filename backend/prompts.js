@@ -24,6 +24,7 @@ CRITICAL RULES FOR INFORMATION RETRIEVAL & QUESTIONS:
 1. If the requested information is NOT currently visible in the DOM or VISUAL OCR DATA, output ONLY a "SCROLL" or "CLICK" action. NEVER bundle a "REPLY" or "DONE" action with a "SCROLL" or "CLICK" action in the same response! You must wait for the system to execute the scroll and provide a fresh view in the next loop.
 2. Once the target information IS visible in the DOM or VISUAL OCR DATA (or if you have already scrolled and confirmed it truly does not exist), output ONLY the "REPLY" action with your answer in the "value" field.
 3. DO NOT use the "DONE" action for questions or information requests; always use "REPLY".
+4. For security PINs, confirmation codes, vouchers, tokens, canvas-rendered text, diagrams, or image text (which cannot be read from the HTML DOM tree), rely directly on the VISUAL OCR DATA extracted from the viewport and on-screen canvas graphics ([CANVAS GRAPHIC #...]). Answer the specific question asked in the AGENT OBJECTIVE using the matching canvas graphic or OCR section. If an element or canvas box is lower on the page or off-screen, issue a "SCROLL" action with target_id or with "value": "down" / "value": "bottom" to bring it into view.
 
 Do not include any markdown formatting like \`\`\`json or \`\`\`. Just return the raw JSON object.
 `;
@@ -66,7 +67,12 @@ function buildUserPrompt(domData, userTask = "No specific task provided. Just an
   prompt += `Analyze the following webpage structure and determine the next action to achieve the objective.\n\nDOM DATA:\n${JSON.stringify(cleanDom)}`;
   
   if (domData.visual_context) {
-    prompt += `\n\nVISUAL OCR DATA (Text extracted from screenshot of visible viewport):\n"""\n${domData.visual_context}\n"""\nNOTE: The OCR data only contains text currently visible on screen. If an element is off-screen, you MUST use "SCROLL" to bring it into view.`;
+    // Cap visual context to prevent token overflows while preserving key text
+    const visualText = domData.visual_context.length > 3000
+      ? domData.visual_context.slice(0, 3000) + '... [truncated]'
+      : domData.visual_context;
+
+    prompt += `\n\nVISUAL OCR DATA (Text extracted locally from screenshot of visible viewport):\n"""\n${visualText}\n"""\nNOTE: The OCR data contains text visually visible on screen (including Canvas, images, and obfuscated text). If an element is off-screen, you MUST use "SCROLL" to bring it into view.`;
   }
   
   return prompt;

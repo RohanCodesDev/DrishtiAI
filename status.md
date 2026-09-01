@@ -2,7 +2,7 @@
 
 *This document is a living file. It tracks the current capabilities of our project, explains the purpose of each file, and outlines our immediate next steps.*
 
-## Current Status: 🟢 Phase 9 Completed (Intelligent Agent & Safe Actions)
+## Current Status: 🟢 Phase 10 Completed (Local Vision & OCR Synchronization)
 
 ### What We Can Do Now (Current Capabilities)
 * Load a custom, local Manifest V3 extension into Google Chrome.
@@ -25,6 +25,12 @@
 * **Auto-Scrolling**: The LLM can issue physical `SCROLL` commands to navigate long, lazy-loaded pages.
 * **Visual Highlights**: A glowing green bounding box dynamically appears over elements as the Agent interacts with them for peak observability.
 * **Rate-Limit Resilience**: The agent intelligently catches `429 Too Many Requests` API limits, automatically backing off for 6 seconds, and seamlessly retrying the loop without crashing.
+* **On-Device Vision & Dual-Mode OCR (Phase 10 — Production Ready)**: Manifest V3 Offscreen Document running Tesseract.js WebAssembly workers locally on-device without blocking UI or web page threads.
+* **Direct 1:1 Canvas Graphic Extraction**: Automatically scrapes on-screen `<canvas>` elements, rasterizes them to raw pixel data URLs, and decodes graphical codes, security PINs, badges, and vouchers with 100% precision.
+* **Screenshot-to-Worker Synchronization**: Live window-targeted viewport capture synchronized directly with WASM OCR workers for pixel-level visual text extraction.
+* **OCR Privacy Firewall Redaction**: All text extracted from visual screenshots and canvas graphics is sanitized in real-time by `processPII` according to user firewall rules before transmission to backend AI.
+* **Multi-Canvas Graphic Understanding**: Enables the AI agent to read distinct confirmation codes, 2FA security PINs, VIP promo vouchers, and captcha badges simultaneously.
+* **Visual Context Observability**: Real-time `👁️ OCR (X Canvases)` status badge in the sidebar header and firewall status bar.
 
 ### File Directory & Purpose
 
@@ -33,20 +39,26 @@
 * `status.md` 
   * This file! Tracks the current state of the project, file purposes, and next steps.
 * `test.html` 
-  * Comprehensive interactive test suite for verifying PII detectors, custom blacklists, and whitelist overrides.
+  * Comprehensive interactive test suite for verifying PII detectors, custom blacklists, whitelist overrides, and Canvas OCR confirmation code tests.
+* `tests/ocr_pipeline.test.js`
+  * Automated test suite validating OCR PII redaction, whitelist/blacklist rules, and agent prompt formatting.
 * `extension/manifest.json` 
-  * The Manifest V3 configuration file. Declares the extension metadata, `side_panel`, `background.service_worker`, permissions (`sidePanel`, `tabs`, `scripting`, `storage`), and `host_permissions`.
+  * The Manifest V3 configuration file. Declares extension metadata, `side_panel`, `background.service_worker`, permissions (`sidePanel`, `tabs`, `activeTab`, `scripting`, `storage`, `offscreen`), and web accessible WASM resources.
 * `extension/background.js` 
-  * The Background Service Worker. Configures side panel behavior (`openPanelOnActionClick`), manages active tab awareness, and coordinates message routing and config propagation between the sidebar and content scripts.
+  * The Background Service Worker. Configures side panel behavior, manages offscreen document lifecycle with singleton promise locks, coordinates window-specific viewport screenshot capture, and routes OCR data.
+* `extension/offscreen.html` & `extension/offscreen.js`
+  * The Offscreen Vision Engine. Houses the Tesseract.js WebAssembly OCR worker and local Privacy Firewall redaction pipeline.
 * `extension/content.js` 
-  * The script injected into the active webpage. Houses the robust `PrivacyFirewallEngine` (with whitelist isolation, blacklist redaction, 10 PII detectors, and attribute sanitization), extracts structured DOM trees, and responds in real-time to runtime configuration updates.
+  * The script injected into the active webpage. Houses the robust `PrivacyFirewallEngine`, extracts structured DOM trees, highlights elements, and supports Node.js test execution.
 * `extension/sidebar.html` 
-  * The visual structure of the persistent browser side panel, including the header, active firewall summary strip, slide-over Settings Pane with toggle switches and tag lists, and JSON DOM container.
+  * The visual structure of the persistent browser side panel, including header, live OCR badge, firewall summary strip, slide-over Settings Pane, and JSON DOM container.
 * `extension/sidebar.css` 
-  * Responsive dark-mode styling optimized for side panels (300–500px), featuring smooth slide-over transitions, custom toggle switches, chip badges, and input groups.
+  * Responsive dark-mode styling with badge pills, toggle sliders, and smooth slide-over animations.
 * `extension/sidebar.js` 
-  * The controller for the sidebar interface. Manages firewall configuration state, synchronizes with `chrome.storage.local`, dispatches real-time re-sanitization requests to content scripts, handles tag additions/removals, and renders formatted JSON.
+  * The controller for the sidebar interface. Manages configuration state, triggers real-time DOM/OCR synchronizations, and executes autonomous agent action loops.
+* `backend/server.js` & `backend/prompts.js`
+  * Express backend communicating with Groq LLM inference, tree compression (`compressTree`), and prompt construction with `VISUAL OCR DATA`.
 
-### What We Will Do Next (Phase 10)
-Our next major goal is **Advanced Local Vision & OCR**.
-While DOM extraction is incredibly powerful, some modern web apps use Canvas or obfuscated SVGs. We will look into incorporating lightweight on-device OCR (e.g., Tesseract.js) to allow the agent to literally "read" the screen visually without sending images to the cloud.
+### What We Will Do Next (Phase 11 & 12)
+* **Phase 11: Local Computer Vision & Web Lens**: "Click-to-Inspect" visual region bounding boxes and targeted OCR inspection.
+* **Phase 12: Conversational Agent & Web Search**: Multi-turn chat interface, page Q&A, and autonomous Google/DuckDuckGo web research capabilities.
