@@ -39,6 +39,7 @@
   const whitelistInput = document.getElementById('whitelist-input');
   
   const runAgentBtn = document.getElementById('run-agent-btn');
+  const stopAgentBtn = document.getElementById('stop-agent-btn');
   const taskInput = document.getElementById('task-input');
   const autoLoopCb = document.getElementById('auto-loop-cb');
   const whitelistTags = document.getElementById('whitelist-tags');
@@ -505,24 +506,78 @@
     }
 
     if (runAgentBtn && taskInput) {
+      let isAgentRunning = false;
+      let agentAbortController = null;
+      let pendingLoopTimer = null;
+
+      function setAgentRunningState(running) {
+        isAgentRunning = running;
+        if (runAgentBtn) {
+          runAgentBtn.disabled = running;
+          if (!running) {
+            runAgentBtn.textContent = 'Run Agent';
+          }
+        }
+        if (stopAgentBtn) {
+          stopAgentBtn.disabled = !running;
+        }
+      }
+
+      function stopAgentExecution() {
+        if (!isAgentRunning) return;
+        isAgentRunning = false;
+        if (pendingLoopTimer) {
+          clearTimeout(pendingLoopTimer);
+          pendingLoopTimer = null;
+        }
+        if (agentAbortController) {
+          try {
+            agentAbortController.abort();
+          } catch (e) {
+            console.warn('DrishtiAI: Error aborting controller:', e);
+          }
+          agentAbortController = null;
+        }
+        setAgentRunningState(false);
+        if (aiResponseText) {
+          aiResponseText.innerHTML += '<br/><br/><strong style="color: #ef4444;">⏹ Agent execution stopped by user.</strong>';
+        }
+      }
+
+      function cancellableDelay(ms) {
+        return new Promise((resolve) => {
+          const timer = setTimeout(resolve, ms);
+          if (agentAbortController) {
+            agentAbortController.signal.addEventListener('abort', () => {
+              clearTimeout(timer);
+              resolve();
+            }, { once: true });
+          }
+        });
+      }
+
       async function executeAgentStep(loopCount = 1, actionHistory = []) {
+        if (!isAgentRunning) return;
+
         if (loopCount > 10) {
           if (aiResponseText) aiResponseText.innerHTML += '<br/><strong>Loop Limit Reached (10).</strong>';
-          runAgentBtn.textContent = 'Run Agent';
-          runAgentBtn.disabled = false;
+          setAgentRunningState(false);
           return;
         }
 
-        if (!currentJsonText) return;
+        if (!currentJsonText) {
+          setAgentRunningState(false);
+          return;
+        }
         
         const userTask = taskInput.value.trim();
         if (!userTask) {
           alert('Please enter an objective for the agent.');
+          setAgentRunningState(false);
           return;
         }
 
         runAgentBtn.textContent = `Running (Loop ${loopCount})...`;
-        runAgentBtn.disabled = true;
         
         if (aiResponseBanner) aiResponseBanner.style.display = 'flex';
         if (aiResponseText) {
@@ -537,10 +592,15 @@
           const response = await fetch('http://localhost:3000/api/analyze', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify(payload)
+            body: JSON.stringify(payload),
+            signal: agentAbortController ? agentAbortController.signal : undefined
           });
 
+          if (!isAgentRunning) return;
+
           const result = await response.json();
+          if (!isAgentRunning) return;
+
           let isDone = false;
           
           if (result.success && result.ai_response && result.ai_response.actions) {
@@ -558,6 +618,11 @@
             }
             
             for (const ai of actions) {
+              if (!isAgentRunning) {
+                isDone = true;
+                break;
+              }
+
               if (ai.action === 'DONE') {
                 isDone = true;
                 break;
@@ -571,7 +636,11 @@
                 // Actually pause execution for the wait command
                 actionHistory.push({ action: ai.action, target: 'N/A', value: '2000ms', execution_result: 'SUCCESS' });
                 if (aiResponseText) aiResponseText.innerHTML += `<br/><span style="color: #f59e0b;">⏳ Waiting...</span>`;
-                await new Promise(resolve => setTimeout(resolve, 2000));
+                await cancellableDelay(2000);
+                if (!isAgentRunning) {
+                  isDone = true;
+                  break;
+                }
               } else if (ai.action) {
                 // Forward action to background to execute in content script
                 const feedback = await new Promise((resolve) => {
@@ -584,11 +653,20 @@
                   });
                 });
                 
+                if (!isAgentRunning) {
+                  isDone = true;
+                  break;
+                }
+
                 const executionResult = (feedback && feedback.success) ? 'SUCCESS' : ('FAILED: ' + (feedback?.error || 'Unknown error'));
                 actionHistory.push({ action: ai.action, target: ai.target_id, value: ai.value, execution_result: executionResult });
                 
                 // Micro-delay between actions in the same loop
-                await new Promise(resolve => setTimeout(resolve, 100));
+                await cancellableDelay(100);
+                if (!isAgentRunning) {
+                  isDone = true;
+                  break;
+                }
               }
             }
           } else if (result.success && result.ai_response && result.ai_response.action) {
@@ -602,7 +680,9 @@
               aiResponseText.innerHTML = html;
             }
             
-            if (ai.action === 'DONE') {
+            if (!isAgentRunning) {
+              isDone = true;
+            } else if (ai.action === 'DONE') {
               isDone = true;
             } else if (ai.action === 'REPLY') {
               actionHistory.push({ action: ai.action, target: 'USER', value: ai.value, execution_result: 'SUCCESS' });
@@ -611,7 +691,7 @@
             } else if (ai.action === 'WAIT') {
               actionHistory.push({ action: ai.action, target: 'N/A', value: '2000ms', execution_result: 'SUCCESS' });
               if (aiResponseText) aiResponseText.innerHTML += `<br/><span style="color: #f59e0b;">⏳ Waiting...</span>`;
-              await new Promise(resolve => setTimeout(resolve, 2000));
+              await cancellableDelay(2000);
             } else if (ai.action) {
               const feedback = await new Promise((resolve) => {
                 chrome.runtime.sendMessage({
@@ -623,16 +703,26 @@
                 });
               });
               
-              const executionResult = (feedback && feedback.success) ? 'SUCCESS' : ('FAILED: ' + (feedback?.error || 'Unknown error'));
-              actionHistory.push({ action: ai.action, target: ai.target_id, value: ai.value, execution_result: executionResult });
+              if (!isAgentRunning) {
+                isDone = true;
+              } else {
+                const executionResult = (feedback && feedback.success) ? 'SUCCESS' : ('FAILED: ' + (feedback?.error || 'Unknown error'));
+                actionHistory.push({ action: ai.action, target: ai.target_id, value: ai.value, execution_result: executionResult });
+              }
             }
           } else if (result.error === 'RATE_LIMIT_EXCEEDED') {
+            if (!isAgentRunning) return;
             if (aiResponseText) aiResponseText.innerHTML += '<br/><strong>⏳ Rate Limit Hit! Backing off for 6 seconds before retrying...</strong>';
             if (autoLoopCb && autoLoopCb.checked) {
-              setTimeout(async () => {
+              pendingLoopTimer = setTimeout(async () => {
+                pendingLoopTimer = null;
+                if (!isAgentRunning) return;
                 await loadBoundTabDOM();
+                if (!isAgentRunning) return;
                 executeAgentStep(loopCount, actionHistory); // Retry the exact same loop
               }, 6000);
+            } else {
+              setAgentRunningState(false);
             }
             return;
           } else {
@@ -641,7 +731,7 @@
           }
 
           // Handle Auto-Looping
-          if (!isDone && autoLoopCb && autoLoopCb.checked) {
+          if (!isDone && autoLoopCb && autoLoopCb.checked && isAgentRunning) {
             if (aiResponseText) {
               aiResponseText.innerHTML += `<br/><br/><div style="padding: 8px; background: #1e3a8a; color: #93c5fd; border-radius: 4px; font-size: 11px; text-align: center; border: 1px dashed #3b82f6;">
                 <strong>🔄 Autonomous Mode Active</strong><br/>
@@ -649,32 +739,48 @@
               </div>`;
             }
             
-            // Disable button during auto-loop
             if (runAgentBtn) {
               runAgentBtn.disabled = true;
               runAgentBtn.textContent = 'Agent Running...';
             }
             
-            setTimeout(async () => {
+            pendingLoopTimer = setTimeout(async () => {
+              pendingLoopTimer = null;
+              if (!isAgentRunning) return;
               await loadBoundTabDOM();
+              if (!isAgentRunning) return;
               executeAgentStep(loopCount + 1, actionHistory);
             }, 2500);
           } else {
-            if (runAgentBtn) {
-              runAgentBtn.disabled = false;
-              runAgentBtn.textContent = 'Run Agent';
-            }
+            setAgentRunningState(false);
           }
 
         } catch (err) {
+          if (err.name === 'AbortError' || !isAgentRunning) {
+            setAgentRunningState(false);
+            return;
+          }
           console.error('Analysis failed:', err);
           if (aiResponseText) aiResponseText.textContent = 'Connection failed. Is the backend server running?';
-          runAgentBtn.textContent = 'Run Agent';
-          runAgentBtn.disabled = false;
+          setAgentRunningState(false);
         }
       }
 
-      runAgentBtn.addEventListener('click', () => executeAgentStep(1, []));
+      runAgentBtn.addEventListener('click', () => {
+        if (isAgentRunning) return;
+        const userTask = taskInput.value.trim();
+        if (!userTask) {
+          alert('Please enter an objective for the agent.');
+          return;
+        }
+        agentAbortController = new AbortController();
+        setAgentRunningState(true);
+        executeAgentStep(1, []);
+      });
+
+      if (stopAgentBtn) {
+        stopAgentBtn.addEventListener('click', stopAgentExecution);
+      }
     }
 
     // Listen for tab switching and navigation events

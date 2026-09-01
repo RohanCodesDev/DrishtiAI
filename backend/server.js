@@ -1,7 +1,6 @@
 const express = require('express');
 const cors = require('cors');
-const Groq = require('groq-sdk');
-const { AGENT_SYSTEM_PROMPT, buildUserPrompt } = require('./prompts');
+const { runAgentGraph } = require('./agent/graph');
 require('dotenv').config();
 
 const app = express();
@@ -16,7 +15,12 @@ app.use(express.json({ limit: '50mb' }));
 
 // Health Check Endpoint
 app.get('/api/health', (req, res) => {
-  res.json({ status: 'ok', message: 'DrishtiAI Backend is running.' });
+  res.json({
+    status: 'ok',
+    message: 'DrishtiAI Backend running with LangGraph.js + LangChain.js',
+    model: process.env.GROQ_MODEL || 'openai/gpt-oss-20b',
+    framework: 'LangGraph.js'
+  });
 });
 
 // Main Endpoint: Receive sanitized DOM context from the extension
@@ -28,82 +32,64 @@ app.post('/api/analyze', async (req, res) => {
       return res.status(400).json({ error: 'Invalid payload: Missing structured DOM.' });
     }
 
-    console.log(`\n--- Received New Page Context for Analysis ---`);
-    console.log(`URL: ${sanitizedData.url}`);
-    console.log(`Title: ${sanitizedData.title}`);
-    console.log(`Elements: ${sanitizedData.element_count}`);
-    console.log(`Firewall Active Rules: ${sanitizedData.firewall_active_rules}`);
-    if (sanitizedData.visual_context) {
-      console.log(`Visual OCR Text: "${sanitizedData.visual_context.replace(/\n+/g, ' ').trim()}"`);
-    } else {
-      console.log(`Visual OCR Text: NOT PROVIDED`);
-    }
-    
-    // Initialize Groq SDK (requires process.env.GROQ_API_KEY)
     if (!process.env.GROQ_API_KEY) {
-      return res.status(500).json({ error: 'GROQ_API_KEY is missing from backend/.env' });
-    }
-
-    const groq = new Groq({ apiKey: process.env.GROQ_API_KEY });
-    
-    console.log('--- Querying Groq... ---');
-    console.log(`User Task: ${sanitizedData.userTask || 'None'}`);
-    const userPrompt = buildUserPrompt(sanitizedData, sanitizedData.userTask, sanitizedData.actionHistory);
-
-    const chatCompletion = await groq.chat.completions.create({
-      messages: [
-        {
-          role: 'system',
-          content: AGENT_SYSTEM_PROMPT
-        },
-        {
-          role: 'user',
-          content: userPrompt
-        }
-      ],
-      model: 'openai/gpt-oss-20b'
-    });
-
-    let responseText = chatCompletion.choices[0]?.message?.content || '{}';
-
-    // Regex extraction to cleanly extract JSON even if LLM hallucinated markdown/text
-    const jsonMatch = responseText.match(/\{[\s\S]*\}|\[[\s\S]*\]/);
-    if (jsonMatch) {
-      responseText = jsonMatch[0];
-    }
-
-    let aiAction = {};
-    try {
-      aiAction = JSON.parse(responseText);
-    } catch (parseErr) {
-      console.error('Failed to parse Groq JSON output:', responseText);
-      aiAction = { action: 'WAIT', reason: 'Failed to parse AI output', raw: responseText };
-    }
-
-    console.log('--- Responding with Action ---', aiAction);
-    res.json({ success: true, ai_response: aiAction });
-
-  } catch (error) {
-    console.error('Error during analysis:', error);
-    
-    // Check if it is a Groq Rate Limit Error (Status 429 or 413 Payload Too Large)
-    const isRateLimit = error.status === 429 || error.status === 413 || 
-      (error?.error?.error?.code === 'rate_limit_exceeded');
-      
-    if (isRateLimit) {
-      return res.status(429).json({ 
-        success: false, 
-        error: 'RATE_LIMIT_EXCEEDED', 
-        message: 'Groq API rate limit or token payload exceeded.' 
+      return res.status(500).json({
+        success: false,
+        error: 'GROQ_API_KEY is missing from backend/.env'
       });
     }
 
-    res.status(500).json({ success: false, error: 'Internal server error.' });
+    // Execute stateful LangGraph reasoning & validation cycle
+    const finalState = await runAgentGraph(sanitizedData);
+
+    const aiResponse = {
+      actions: finalState.validatedActions || [],
+      is_done: finalState.isDone || false,
+      reason: finalState.summaryReason || 'Actions determined by LangGraph agent',
+      error: finalState.error || undefined
+    };
+
+    res.json({
+      success: true,
+      ai_response: aiResponse,
+      state_summary: {
+        loop_count: finalState.loopCount,
+        actions_count: aiResponse.actions.length,
+        is_done: aiResponse.is_done
+      }
+    });
+
+  } catch (error) {
+    console.error('[DRISHTI] Error during LangGraph analysis:', error);
+
+    // Check if it is a Groq Rate Limit Error (Status 429 or 413 Payload Too Large)
+    const isRateLimit = error.status === 429 || error.status === 413 ||
+      (error?.error?.error?.code === 'rate_limit_exceeded') ||
+      (typeof error.message === 'string' && error.message.includes('429'));
+
+    if (isRateLimit) {
+      return res.status(429).json({
+        success: false,
+        error: 'RATE_LIMIT_EXCEEDED',
+        message: 'Groq API rate limit or token payload exceeded.'
+      });
+    }
+
+    res.status(500).json({
+      success: false,
+      error: 'Internal server error during LangGraph execution.',
+      details: error.message
+    });
   }
 });
 
-// Start the server
-app.listen(PORT, () => {
-  console.log(`🛡️ DrishtiAI Local Backend running on http://localhost:${PORT}`);
-  console.log(`Ready to receive sanitized page context on POST /api/analyze`);
-});
+// Start server when executed directly
+if (require.main === module) {
+  app.listen(PORT, () => {
+    console.log(`🛡️ DrishtiAI LangGraph Backend running on http://localhost:${PORT}`);
+    console.log(`Model: ${process.env.GROQ_MODEL || 'openai/gpt-oss-20b'}`);
+    console.log(`Ready to receive sanitized page context on POST /api/analyze`);
+  });
+}
+
+module.exports = app;

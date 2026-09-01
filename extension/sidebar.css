@@ -607,6 +607,30 @@ body {
   border-color: #1c80e0;
 }
 
-.btn-primary:hover {
+.btn-primary:hover:not(:disabled) {
   background-color: #1c80e0;
+}
+
+.btn-danger {
+  background-color: #dc2626;
+  color: #ffffff;
+  border-color: #b91c1c;
+}
+
+.btn-danger:hover:not(:disabled) {
+  background-color: #b91c1c;
+}
+
+.btn:disabled,
+.btn[disabled] {
+  opacity: 0.45;
+  cursor: not-allowed;
+  filter: grayscale(40%);
+}
+
+.prompt-actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-top: 8px;
 }
