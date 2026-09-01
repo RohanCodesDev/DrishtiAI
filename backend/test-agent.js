@@ -218,6 +218,15 @@ async function main() {
     assert.ok(result.errors.some(e => e.includes('SECURITY_VIOLATION')));
   });
 
+  runTest('Validator normalizes raw URLs in NAVIGATE action (e.g. google.com -> https://google.com)', () => {
+    const result = validateActions([
+      { action: 'NAVIGATE', value: 'google.com', reason: 'Open Google' }
+    ], sampleSanitizedDom, 1);
+
+    assert.strictEqual(result.valid, true);
+    assert.strictEqual(result.actions[0].value, 'https://google.com');
+  });
+
   runTest('Validator warns when target_id does not exist in DOM snapshot', () => {
     const result = validateActions([
       { action: 'CLICK', target_id: 'element_unknown_99', reason: 'Test missing' }

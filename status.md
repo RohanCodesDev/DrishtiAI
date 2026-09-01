@@ -14,6 +14,7 @@
 * **Extension Browser Action Executor**: Content script executes physical `CLICK`, `TYPE`, `SCROLL`, `NAVIGATE`, and `WAIT` commands with live visual green highlighting HUD and execution feedback (`SUCCESS` / `FAILED`).
 * **Multi-Action Batching & Auto-Loop**: Plans sequential actions in a single step with 100ms micro-delays and autonomous looping up to the 10-loop cap with rate-limit backoff.
 * **Instant Stop & Cancellation Control**: Dedicated prompt section Stop button with `AbortController` cancellation for in-flight requests, timer clearing, and loop execution interruption.
+* **New Tab Synthetic DOM & Autonomous Navigation**: Handles `chrome://newtab` and blank/restricted tabs by generating synthetic structured DOM context and executing `NAVIGATE` actions directly via `chrome.tabs.update` in the background worker with live post-navigation DOM re-extraction.
 
 ### File Directory & Purpose
 

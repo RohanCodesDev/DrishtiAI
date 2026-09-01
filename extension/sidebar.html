@@ -3,80 +3,113 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>DrishtiAI — DOM JSON</title>
+  <title>DrishtiAI — Agentic Browser Assistant</title>
   <link rel="stylesheet" href="sidebar.css">
 </head>
 <body>
   <div class="sidebar-container">
     
-    <!-- Minimal Header -->
+    <!-- Header -->
     <header class="header">
       <div class="brand">
-        <span class="brand-title">DrishtiAI</span>
-        <span id="element-count-badge" class="count-badge">Extracting...</span>
+        <div class="brand-logo-glow">🛡️</div>
+        <div class="brand-info">
+          <span class="brand-title">DrishtiAI</span>
+          <span class="brand-subtitle">Agentic Co-Pilot</span>
+        </div>
       </div>
-      <div class="actions">
-        <button id="analyze-btn" class="btn btn-primary" title="Send to AI for analysis">Analyze</button>
-        <button id="copy-btn" class="btn" title="Copy JSON">Copy</button>
-        <button id="refresh-btn" class="btn" title="Refresh DOM">Refresh</button>
-        <button id="settings-toggle-btn" class="btn btn-settings" title="Privacy Firewall Settings">
+      <div class="header-actions">
+        <button id="new-chat-btn" class="icon-btn-header" title="New Chat / Clear Conversation">
+          <span class="btn-icon">🧹</span>
+        </button>
+        <button id="refresh-btn" class="icon-btn-header" title="Refresh Page Context & DOM">
+          <span class="btn-icon">🔄</span>
+        </button>
+        <button id="settings-toggle-btn" class="btn btn-settings" title="Firewall & DOM Inspector">
           <span class="gear-icon">⚙️</span>
-          <span class="btn-label">Firewall</span>
+          <span class="btn-label">Settings</span>
         </button>
       </div>
     </header>
 
     <!-- Page Context Bar -->
     <div class="context-bar">
-      <span class="page-title" id="page-title">Detecting page...</span>
-    </div>
-
-    <!-- Debug Error Banner -->
-    <div id="debug-error-banner" style="display: none; background: #5c1818; color: #ff8e8e; font-size: 11px; padding: 10px; margin: 10px; border-radius: 4px; font-family: monospace; word-break: break-all;">
-      <strong>Debug Error Info:</strong><br/>
-      <span id="debug-error-text"></span>
-    </div>
-
-    <!-- Task Input Section -->
-    <div class="task-input-section" style="padding: 10px; background: var(--bg-card); border-bottom: 1px solid var(--border-color);">
-      <div style="font-weight: 500; color: var(--text-primary); margin-bottom: 6px; font-size: 12px; display: flex; justify-content: space-between; align-items: center;">
-        <span>🎯 Agent Objective</span>
-        <label style="font-size: 11px; font-weight: normal; cursor: pointer;">
-          <input type="checkbox" id="auto-loop-cb" style="margin-right: 4px; vertical-align: middle;" checked> Auto-Loop
-        </label>
-      </div>
-      <textarea id="task-input" placeholder="e.g. 'Click the submit button', 'Fill out the login form'" style="width: 100%; height: 50px; background: var(--bg-hover); border: 1px solid var(--border-color); color: var(--text-primary); padding: 8px; border-radius: 4px; resize: none; font-family: inherit; font-size: 12px; box-sizing: border-box;"></textarea>
-      <div class="prompt-actions">
-        <button id="run-agent-btn" class="btn btn-primary" style="flex: 1; justify-content: center;">Run Agent</button>
-        <button id="stop-agent-btn" class="btn btn-danger" style="justify-content: center; min-width: 72px;" disabled title="Stop running agent">⏹ Stop</button>
-      </div>
-    </div>
-
-    <!-- AI Response Banner -->
-    <div id="ai-response-banner" class="ai-response-banner" style="display: none;">
-      <div class="ai-header">🤖 AI Agent Response:</div>
-      <div id="ai-response-text" class="ai-text">Thinking...</div>
-    </div>
-
-    <!-- Active Firewall Summary Pill -->
-    <div class="firewall-status-strip" id="firewall-status-strip" title="Click to configure Privacy Firewall">
-      <div class="status-left">
+      <div class="context-pill">
         <span class="status-dot"></span>
-        <span id="firewall-status-text">Shield Active: 10 Rules</span>
+        <span class="page-title" id="page-title">Detecting active page...</span>
       </div>
-      <div class="status-right" id="firewall-tags-summary">
-        <span class="tag-pill tag-bl" id="bl-count-pill" title="Custom Blacklist">0 BL</span>
-        <span class="tag-pill tag-wl" id="wl-count-pill" title="Custom Whitelist">0 WL</span>
-        <span class="chevron">›</span>
-      </div>
+      <span id="element-count-badge" class="count-badge">0 elements</span>
     </div>
 
-    <!-- DOM JSON Display Area -->
-    <main class="json-container">
-      <pre id="json-output">Loading DOM structure...</pre>
+    <!-- Main Chat Workspace -->
+    <main class="chat-workspace" id="chat-workspace">
+      
+      <!-- Welcome / Empty State Screen -->
+      <div id="welcome-screen" class="welcome-screen">
+        <div class="welcome-icon-box">🤖</div>
+        <h2 class="welcome-heading">How can Drishti assist you?</h2>
+        <p class="welcome-subtext">Autonomous browser agent with on-device Privacy Firewall protection.</p>
+        
+        <div class="quick-prompts-group">
+          <div class="quick-prompts-title">Suggested Objectives:</div>
+          <div class="quick-chips-grid">
+            <button class="quick-chip" data-prompt="Fill out the form fields with realistic mock data and submit.">
+              <span>✍️</span> Fill out form & submit
+            </button>
+            <button class="quick-chip" data-prompt="Analyze the page for any exposed PII or sensitive credentials.">
+              <span>🛡️</span> Audit page privacy
+            </button>
+            <button class="quick-chip" data-prompt="Click the primary call-to-action button on this page.">
+              <span>🎯</span> Click primary CTA
+            </button>
+            <button class="quick-chip" data-prompt="Summarize the structure and main sections of this webpage.">
+              <span>📄</span> Summarize page
+            </button>
+          </div>
+        </div>
+      </div>
+
+      <!-- Message Stream -->
+      <div id="chat-messages" class="chat-messages" style="display: none;"></div>
+
+      <!-- Agent Activity Indicator -->
+      <div id="agent-activity-indicator" class="activity-indicator" style="display: none;">
+        <div class="activity-avatar">🤖</div>
+        <div class="activity-bubble">
+          <span class="pulse-dot"></span>
+          <span id="activity-text" class="activity-text">Drishti is reasoning...</span>
+        </div>
+      </div>
     </main>
 
-    <!-- Slide-over / Modal Settings Pane -->
+    <!-- Bottom Chat Composer -->
+    <footer class="composer-container">
+      <div class="composer-card">
+        <textarea id="task-input" class="composer-textarea" placeholder="Give the agent an objective... (Enter to send, Shift+Enter for new line)" rows="2"></textarea>
+        
+        <div class="composer-toolbar">
+          <div class="toolbar-left">
+            <label class="auto-loop-toggle" title="Automatically evaluate next steps up to 10 loops">
+              <input type="checkbox" id="auto-loop-cb" checked>
+              <span class="loop-toggle-slider"></span>
+              <span class="loop-label">Auto-Loop</span>
+            </label>
+            <span class="context-elements-hint" id="context-elements-hint">📄 Ready</span>
+          </div>
+
+          <div class="toolbar-right">
+            <button id="stop-agent-btn" class="btn btn-danger btn-sm" disabled title="Stop running agent">
+              <span>⏹</span> Stop
+            </button>
+            <button id="run-agent-btn" class="btn btn-primary btn-sm" title="Send objective to Agent">
+              <span>➤</span> Run
+            </button>
+          </div>
+        </div>
+      </div>
+    </footer>
+
+    <!-- Slide-over / Modal Settings & Inspector Pane -->
     <div id="settings-pane" class="settings-pane" aria-hidden="true">
       <div class="settings-backdrop" id="settings-backdrop"></div>
       <div class="settings-content">
@@ -84,14 +117,36 @@
         <!-- Settings Header -->
         <div class="settings-pane-header">
           <div class="pane-title-group">
-            <span class="pane-icon">🛡️</span>
-            <h3>Privacy Firewall</h3>
+            <span class="pane-icon">⚙️</span>
+            <h3>Settings & Inspector</h3>
           </div>
           <button id="close-settings-btn" class="icon-btn" title="Close Settings">✕</button>
         </div>
 
-        <div class="settings-scroll-body">
+        <!-- Tab Navigation Switcher -->
+        <div class="drawer-tabs-bar">
+          <button id="tab-btn-firewall" class="drawer-tab active" data-tab="firewall">
+            <span>🛡️</span> Privacy Firewall
+          </button>
+          <button id="tab-btn-dom" class="drawer-tab" data-tab="dom">
+            <span>📄</span> DOM JSON Inspector
+          </button>
+        </div>
+
+        <!-- TAB 1: Privacy Firewall -->
+        <div id="tab-content-firewall" class="tab-content active">
           
+          <div class="firewall-summary-card">
+            <div class="summary-card-left">
+              <span class="status-dot"></span>
+              <span id="firewall-status-text">Shield Active: 10 / 10 Rules</span>
+            </div>
+            <div class="summary-card-pills">
+              <span class="tag-pill tag-bl" id="bl-count-pill">0 BL</span>
+              <span class="tag-pill tag-wl" id="wl-count-pill">0 WL</span>
+            </div>
+          </div>
+
           <!-- Preset Action Buttons -->
           <div class="presets-row">
             <button id="preset-protect-all" class="preset-btn" title="Enable all built-in PII redactions">Protect All</button>
@@ -99,10 +154,10 @@
             <button id="preset-reset" class="preset-btn" title="Reset all settings to default">Reset</button>
           </div>
 
-          <!-- Section 1: Built-in PII Rules -->
+          <!-- Built-in PII Detectors Section -->
           <div class="settings-section">
             <div class="section-title">Built-in PII Detectors</div>
-            <div class="section-subtitle">Toggled ON = Redact and protect this data type locally</div>
+            <div class="section-subtitle">Toggled ON = Redact and protect this data type locally on-device</div>
             
             <div class="rules-list">
               
@@ -199,7 +254,7 @@
             </div>
           </div>
 
-          <!-- Section 2: Custom Blacklist -->
+          <!-- Custom Blacklist -->
           <div class="settings-section">
             <div class="section-title">Custom Blacklist (Always Redact)</div>
             <div class="section-subtitle">Always mask matching terms as [BLACKLIST_REDACTED]</div>
@@ -209,12 +264,10 @@
               <button type="submit" class="btn btn-add" id="add-blacklist-btn">+ Add</button>
             </form>
 
-            <div id="blacklist-tags" class="tags-list">
-              <!-- Dynamically populated tags -->
-            </div>
+            <div id="blacklist-tags" class="tags-list"></div>
           </div>
 
-          <!-- Section 3: Custom Whitelist -->
+          <!-- Custom Whitelist -->
           <div class="settings-section">
             <div class="section-title">Custom Whitelist (Always Allow)</div>
             <div class="section-subtitle">Preserve matching terms pristine (never redacted)</div>
@@ -224,12 +277,37 @@
               <button type="submit" class="btn btn-add" id="add-whitelist-btn">+ Add</button>
             </form>
 
-            <div id="whitelist-tags" class="tags-list">
-              <!-- Dynamically populated tags -->
-            </div>
+            <div id="whitelist-tags" class="tags-list"></div>
           </div>
 
         </div>
+
+        <!-- TAB 2: DOM JSON Inspector -->
+        <div id="tab-content-dom" class="tab-content">
+          
+          <!-- DOM Inspector Search & Action Bar -->
+          <div class="dom-inspector-toolbar">
+            <div class="search-box-wrapper">
+              <span class="search-icon">🔍</span>
+              <input type="search" id="dom-search-input" class="dom-search-input" placeholder="Search tags, IDs, keys, values..." autocomplete="off">
+              <span id="dom-search-count" class="search-match-count">0 matches</span>
+            </div>
+            
+            <div class="dom-toolbar-actions">
+              <button id="dom-search-prev-btn" class="btn btn-sm btn-icon-only" title="Previous match" disabled>▲</button>
+              <button id="dom-search-next-btn" class="btn btn-sm btn-icon-only" title="Next match" disabled>▼</button>
+              <button id="dom-copy-btn" class="btn btn-sm" title="Copy raw sanitized JSON">📋 Copy</button>
+              <button id="dom-refresh-btn" class="btn btn-sm" title="Re-extract DOM from active tab">🔄 Refresh</button>
+            </div>
+          </div>
+
+          <!-- DOM Structure Container -->
+          <div class="json-container" id="json-container">
+            <pre id="json-output">Loading structured DOM...</pre>
+          </div>
+
+        </div>
+
       </div>
     </div>
 

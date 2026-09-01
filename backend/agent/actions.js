@@ -180,6 +180,10 @@ function validateActions(actions, domData = null, loopCount = 1) {
           result.errors.push(`SECURITY_VIOLATION: Unsafe URL scheme in NAVIGATE action: "${value}"`);
           continue;
         }
+        // Normalize URL if missing http/https protocol
+        if (!/^https?:\/\//i.test(cleanAction.value) && !cleanAction.value.startsWith('chrome://') && !cleanAction.value.startsWith('about:')) {
+          cleanAction.value = 'https://' + cleanAction.value;
+        }
         break;
       }
 

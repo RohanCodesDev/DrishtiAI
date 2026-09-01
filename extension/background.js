@@ -82,10 +82,30 @@ async function getTabDOM(targetTabId, config = null) {
   }
 
   if (isRestrictedUrl(tabUrl)) {
-    const err = new Error('RESTRICTED_PAGE');
-    err.code = 'RESTRICTED_PAGE';
-    err.url = tabUrl;
-    throw err;
+    const isNewTab = tabUrl.startsWith('chrome://newtab') || tabUrl.startsWith('about:') || tabUrl.startsWith('edge://newtab') || tabUrl === '';
+    const friendlyTitle = isNewTab ? 'New Tab' : (tabUrl || 'Restricted Page');
+    return {
+      title: friendlyTitle,
+      url: tabUrl || 'chrome://newtab',
+      element_count: 1,
+      is_restricted: true,
+      root: {
+        id: 'drishti-restricted-root',
+        tag: 'BODY',
+        type: 'root',
+        text: `Active tab is on ${friendlyTitle} (${tabUrl}). Ready for navigation. To visit a website, issue a NAVIGATE action with the target URL (e.g. https://www.google.com).`,
+        children: [
+          {
+            id: 'drishti-newtab-notice',
+            tag: 'DIV',
+            type: 'container',
+            text: `Browser Page: ${friendlyTitle}`,
+            children: []
+          }
+        ]
+      },
+      visual_context: `(Active tab is ${friendlyTitle} [${tabUrl}]. Ready for navigation.)`
+    };
   }
 
   // Attempt 1: Try sending message to active content script v2 in target tab
@@ -134,7 +154,20 @@ async function getTabDOM(targetTabId, config = null) {
       return executionResults[0].result;
     }
   } catch (injectErr) {
-    throw new Error(`INJECTION_FAILED: ${injectErr.message}`);
+    // Return fallback synthetic DOM if script injection is not allowed on this page
+    return {
+      title: tabUrl || 'Browser Tab',
+      url: tabUrl,
+      element_count: 1,
+      root: {
+        id: 'drishti-fallback-root',
+        tag: 'BODY',
+        type: 'root',
+        text: `Tab loaded (${tabUrl}). Ready for navigation or analysis.`,
+        children: []
+      },
+      visual_context: `(Tab loaded at ${tabUrl})`
+    };
   }
 
   throw new Error('NO_DOM_DATA_RETURNED');
@@ -147,36 +180,35 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
       try {
         const domData = await getTabDOM(message.tabId, message.config);
         
-        // Phase 10: Capture Screenshot and Run OCR
-        try {
-          // Take screenshot of active tab (requires activeTab permission or tabs + host)
-          const dataUrl = await chrome.tabs.captureVisibleTab(null, { format: 'png' });
-          
-          if (dataUrl) {
-            // Send to Offscreen Document for OCR
-            const ocrResponse = await new Promise((resolve) => {
-              chrome.runtime.sendMessage({
-                target: 'offscreen',
-                type: 'RUN_OCR',
-                dataUrl: dataUrl
-              }, (res) => {
-                if (chrome.runtime.lastError) {
-                  resolve(null);
-                } else {
-                  resolve(res);
-                }
+        // Capture Screenshot and Run OCR if not on restricted page
+        if (!domData.is_restricted) {
+          try {
+            const dataUrl = await chrome.tabs.captureVisibleTab(null, { format: 'png' });
+            
+            if (dataUrl) {
+              const ocrResponse = await new Promise((resolve) => {
+                chrome.runtime.sendMessage({
+                  target: 'offscreen',
+                  type: 'RUN_OCR',
+                  dataUrl: dataUrl
+                }, (res) => {
+                  if (chrome.runtime.lastError) {
+                    resolve(null);
+                  } else {
+                    resolve(res);
+                  }
+                });
               });
-            });
 
-            if (ocrResponse && ocrResponse.success && ocrResponse.text) {
-              domData.visual_context = ocrResponse.text;
-            } else {
-              domData.visual_context = "(No visual text detected or OCR failed)";
+              if (ocrResponse && ocrResponse.success && ocrResponse.text) {
+                domData.visual_context = ocrResponse.text;
+              } else {
+                domData.visual_context = "(No visual text detected or OCR failed)";
+              }
             }
+          } catch (visionErr) {
+            console.warn('Vision OCR skipped or failed:', visionErr.message);
           }
-        } catch (visionErr) {
-          console.warn('Vision OCR skipped or failed:', visionErr.message);
-          domData.visual_context = "(OCR capture blocked: " + visionErr.message + " - NOTE: If testing on a local file, ensure 'Allow access to file URLs' is enabled in chrome://extensions for this extension)";
         }
 
         sendResponse({ success: true, data: domData });
@@ -248,11 +280,58 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
         const [activeTab] = await chrome.tabs.query({ active: true, currentWindow: true });
         tabId = activeTab?.id;
       }
+
+      const ai = message.action;
+
+      // Handle NAVIGATE directly via chrome.tabs API in background worker
+      if (ai && ai.action === 'NAVIGATE' && ai.value) {
+        let targetUrl = String(ai.value).trim();
+        if (!/^https?:\/\//i.test(targetUrl) && !targetUrl.startsWith('chrome://') && !targetUrl.startsWith('about:')) {
+          targetUrl = 'https://' + targetUrl;
+        }
+
+        try {
+          if (tabId) {
+            await chrome.tabs.update(tabId, { url: targetUrl });
+
+            // Wait for tab navigation to complete loading
+            await new Promise((resolve) => {
+              const navTimeout = setTimeout(() => {
+                chrome.tabs.onUpdated.removeListener(navListener);
+                resolve();
+              }, 6000);
+
+              const navListener = (updatedTabId, changeInfo) => {
+                if (updatedTabId === tabId && changeInfo.status === 'complete') {
+                  clearTimeout(navTimeout);
+                  chrome.tabs.onUpdated.removeListener(navListener);
+                  resolve();
+                }
+              };
+              chrome.tabs.onUpdated.addListener(navListener);
+            });
+
+            sendResponse({ success: true, navigatedTo: targetUrl });
+            return;
+          }
+        } catch (navErr) {
+          console.error('Background navigation error:', navErr);
+          sendResponse({ success: false, error: navErr.message });
+          return;
+        }
+      }
+
       if (tabId) {
         chrome.tabs.sendMessage(tabId, message, (res) => {
-          if (chrome.runtime.lastError) console.error('EXECUTE_ACTION error:', chrome.runtime.lastError.message);
-          if (sendResponse) sendResponse(res);
+          if (chrome.runtime.lastError) {
+            console.error('EXECUTE_ACTION error:', chrome.runtime.lastError.message);
+            sendResponse({ success: false, error: chrome.runtime.lastError.message });
+          } else {
+            sendResponse(res || { success: true });
+          }
         });
+      } else {
+        sendResponse({ success: false, error: 'NO_ACTIVE_TAB' });
       }
     })();
     return true;
