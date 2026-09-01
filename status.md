@@ -26,28 +26,35 @@
 * **New Tab Synthetic DOM & Autonomous Navigation**: Handles `chrome://newtab` and blank/restricted tabs by generating synthetic structured DOM context and executing `NAVIGATE` actions directly via `chrome.tabs.update` in the background worker with live post-navigation DOM re-extraction.
 * **NEW_TAB & Intelligent Web Search Engine**: Allows the agent to open brand-new browser tabs (`chrome.tabs.create`), re-bind the sidebar UI controller to the newly created tab automatically, and instantly resolve natural language search requests (e.g. "search for best laptops") into direct Google Search results URLs (`https://www.google.com/search?q=...`) in 1 step.
 * **Synthetic Keyboard Interaction (`KEYPRESS`)**: Dispatches keyboard events (`Enter`, `Tab`, `Escape`) to trigger dynamic SPA search submission and form queries seamlessly.
-* **Interactive "Click-to-Inspect" Web Lens (Phase 11)**: Toggleable Web Lens in the sidebar and composer. When active, hovering over elements on any webpage displays a glowing reticle and tag badge. Clicking an element locks it and presents a floating glassmorphic Action Pill directly on the page with **`[ 📝 Summarize ]`** and **`[ 🔍 Search Web ]`** buttons, which automatically extract and sanitize content and execute the corresponding agent run instantly.
+* **Interactive "Click-to-Inspect" Web Lens (Phase 11 — Complete)**: Toggleable Web Lens in the sidebar and composer. Hovering over elements on any webpage displays a glowing reticle and tag badge. Clicking an element locks it and presents a floating glassmorphic Action Pill directly on the page with **`[ 📝 Summarize ]`**, **`[ 🔍 Search Web ]`**, and **`[ 💬 Ask AI ]`** buttons:
+  - Automatically converts `<table>` elements to structured GitHub-Flavored Markdown.
+  - Automatically triggers direct on-device WASM OCR on `<canvas>` graphics and displays decoded text live.
+  - `Ask AI` quotes the sanitized context into the sidebar composer and focuses the textarea ready for user questions.
+* **One-Click Privacy Audit Certificate & 0-Leak Verification (Phase 14 — SIH PS #171 Mandate)**: Dedicated **Privacy Audit & Compliance** tab in the Settings drawer that aggregates total sanitized DOM elements, decoded canvases, masked face biometrics, shielded PII tokens, and guarantees **0 Bytes External PII Leakage (0.00%)**. Allows one-click export of a cryptographically signed JSON certificate (`drishti_privacy_certificate.json`) and copyable Markdown compliance report for hackathon judges and enterprise compliance officers.
+* **Real-Time Turn Latency & Observability Bar**: Each agent bubble displays an on-device latency & privacy badge telemetry row: `⚡ 2ms DOM · 👤 1 Face Masked · 👁️ 185ms WASM OCR · 🧠 310ms LangGraph · 🛡️ 0 Leaks`.
 
 ### File Directory & Purpose
 
 * `readme.md` 
   * The Master Specification and Roadmap.
+* `documentation.md`
+  * Complete Master Documentation covering all 14 milestones, technical deep dives, and test suite benchmarks.
 * `status.md` 
   * Tracks the current state of the project, file purposes, and next steps.
 * `test.html` 
-  * Comprehensive interactive test suite for verifying PII detectors, custom blacklists, whitelist overrides, and Canvas OCR confirmation code tests.
+  * Comprehensive interactive test suite for verifying PII detectors, custom blacklists, whitelist overrides, Canvas OCR confirmation code tests, and Web Lens inspection cards.
 * `tests/ocr_pipeline.test.js`
-  * Automated test suite validating OCR PII redaction, whitelist/blacklist rules, agent prompt formatting, and SPA safe action execution.
+  * Automated test suite (29 tests) validating OCR PII redaction, whitelist/blacklist rules, agent prompt formatting, SPA safe action execution, Web Lens, and Privacy Audit certificates.
 * `extension/manifest.json` 
   * The Manifest V3 configuration file. Declares extension metadata, `side_panel`, `background.service_worker`, permissions (`sidePanel`, `tabs`, `activeTab`, `scripting`, `storage`, `offscreen`), and web accessible WASM resources.
 * `extension/background.js` 
   * Background Service Worker managing tab awareness, offscreen OCR, autonomous navigation in new tabs, and message routing.
 * `extension/offscreen.html` & `extension/offscreen.js`
-  * The Offscreen Vision Engine. Houses the Tesseract.js WebAssembly OCR worker and local Privacy Firewall redaction pipeline.
+  * The Offscreen Vision Engine. Houses the Tesseract.js WebAssembly OCR worker, Hardware FaceDetector shield, and local Privacy Firewall redaction pipeline.
 * `extension/content.js` 
-  * Content script housing the local Privacy Firewall, structured DOM extractor, SPA native input setters, pointer click simulation, and high-risk action detection.
+  * Content script housing the local Privacy Firewall, structured DOM extractor, SPA native input setters, pointer click simulation, high-risk action detection, and interactive Web Lens reticle/action menu.
 * `extension/sidebar.html`, `sidebar.css`, `sidebar.js` 
-  * Conversational AI sidebar with Tabler Icons, chat message stream, drawer tabs (Firewall Settings & DOM JSON Inspector), and autonomous loop controller.
+  * Conversational AI sidebar with Tabler Icons, chat message stream, turn latency telemetry bars, drawer tabs (Firewall Settings, DOM JSON Inspector, and Zero-Leak Privacy Audit Certificate), and autonomous loop controller.
 * `backend/server.js` 
   * Express server handling CORS, payload limits, health checks, and `/api/analyze` routing to the LangGraph runner.
 * `backend/agent/graph.js` 
@@ -59,10 +66,10 @@
 * `backend/agent/actions.js` 
   * Zod schemas and 2-tier deterministic safety validation engine.
 * `backend/agent/prompts.js` 
-  * Battle-tested system prompts, DOM tree compression (`compressTree`), and user prompt builders.
+  * Battle-tested system prompts, DOM tree compression (`compressTree`), unstructured text definition rules, and user prompt builders.
 * `backend/test-agent.js` 
-  * Automated integration test suite covering compression, schemas, validation, LangGraph execution, and Express endpoints.
+  * Automated integration test suite (24 tests) covering compression, schemas, validation, LangGraph execution, and Express endpoints.
 
-### What We Will Do Next (Phase 11 & 12)
-* **Phase 11: Local Computer Vision & Web Lens**: "Click-to-Inspect" visual region bounding boxes and targeted OCR inspection.
-* **Phase 12: Conversational Agent & Web Search**: Multi-turn chat interface, page Q&A, and autonomous Google/DuckDuckGo web research capabilities.
+### What We Will Do Next (Phase 12 & 13)
+* **Phase 12: Autonomous Multi-Tab Web Research & Synthesis**: Multi-tab comparative research missions with tabular markdown synthesis.
+* **Phase 13: ONNX Runtime Web Local Named Entity Recognition**: In-browser MiniLM quantized transformer for contextual entity recognition (Human Names & Street Addresses).

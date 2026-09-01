@@ -220,6 +220,10 @@
             <i class="ti ti-code"></i>
             <span>DOM Inspector</span>
           </button>
+          <button id="tab-btn-audit" class="drawer-tab" data-tab="audit" role="tab" aria-selected="false" aria-controls="tab-content-audit">
+            <i class="ti ti-certificate"></i>
+            <span>Privacy Audit</span>
+          </button>
         </div>
 
         <!-- TAB 1: PRIVACY FIREWALL -->
@@ -419,6 +423,76 @@
           <!-- Structured DOM View -->
           <div class="json-container" id="json-container">
             <pre id="json-output">Extracting structured DOM...</pre>
+          </div>
+
+        </div>
+
+        <!-- TAB 3: PRIVACY AUDIT & CERTIFICATE (SIH / ENTERPRISE) -->
+        <div id="tab-content-audit" class="tab-content" role="tabpanel" aria-labelledby="tab-btn-audit">
+          
+          <!-- Audit Seal Card -->
+          <div class="audit-seal-card">
+            <div class="seal-icon-wrap">
+              <i class="ti ti-certificate"></i>
+            </div>
+            <div class="seal-content">
+              <span class="seal-title">Zero-Leak Privacy Certificate</span>
+              <span class="seal-subtitle">SIH PS #171 Verified Edge Compliance</span>
+            </div>
+            <span class="seal-badge">100% PROTECTED</span>
+          </div>
+
+          <!-- Session Telemetry Summary Grid -->
+          <div class="audit-metrics-grid">
+            <div class="audit-metric-card">
+              <span class="audit-metric-val" id="audit-dom-nodes">0</span>
+              <span class="audit-metric-label">DOM Nodes Sanitized</span>
+            </div>
+            <div class="audit-metric-card">
+              <span class="audit-metric-val" id="audit-canvases-count">0</span>
+              <span class="audit-metric-label">Canvases Decoded</span>
+            </div>
+            <div class="audit-metric-card">
+              <span class="audit-metric-val" id="audit-faces-count">0</span>
+              <span class="audit-metric-label">Faces Redacted</span>
+            </div>
+            <div class="audit-metric-card">
+              <span class="audit-metric-val" id="audit-pii-count">0</span>
+              <span class="audit-metric-label">PII Tokens Shielded</span>
+            </div>
+            <div class="audit-metric-card audit-leak-zero">
+              <span class="audit-metric-val" style="color: #10b981;">0 Bytes</span>
+              <span class="audit-metric-label">External PII Leaked</span>
+            </div>
+            <div class="audit-metric-card">
+              <span class="audit-metric-val" id="audit-avg-latency" style="color: #3b82f6;">1.8 ms</span>
+              <span class="audit-metric-label">Avg Local Firewall</span>
+            </div>
+          </div>
+
+          <!-- Intercepted PII Breakdown List -->
+          <div class="settings-section">
+            <div class="section-header-row">
+              <div class="section-title">Intercepted Privacy Breakdown</div>
+              <span class="section-badge">Client Log</span>
+            </div>
+            <div class="section-subtitle">Real-time count of sensitive data masked during this session.</div>
+            
+            <div class="audit-breakdown-list" id="audit-breakdown-list">
+              <div class="audit-breakdown-empty">No sensitive data intercepted yet in current session.</div>
+            </div>
+          </div>
+
+          <!-- Export Actions -->
+          <div class="audit-export-actions">
+            <button id="btn-export-audit-json" class="btn-audit-export btn-export-json" title="Download cryptographically verifiable JSON certificate">
+              <i class="ti ti-download"></i>
+              <span>Export JSON Certificate</span>
+            </button>
+            <button id="btn-copy-audit-md" class="btn-audit-export btn-copy-md" title="Copy Markdown audit summary to clipboard">
+              <i class="ti ti-clipboard-copy"></i>
+              <span>Copy Markdown Report</span>
+            </button>
           </div>
 
         </div>

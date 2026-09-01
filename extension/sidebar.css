@@ -1953,3 +1953,225 @@ mark.search-match.active-match {
     display: none;
   }
 }
+
+/* ==========================================================================
+   10. Turn Telemetry & Resource Observability Bar
+   ========================================================================== */
+.turn-telemetry-bar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 5px;
+  margin-top: 8px;
+  padding-top: 6px;
+  border-top: 1px solid rgba(255, 255, 255, 0.06);
+}
+
+.telemetry-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 2px 7px;
+  border-radius: var(--radius-full);
+  font-size: 10px;
+  font-weight: 600;
+  font-family: var(--font-mono);
+  background: rgba(255, 255, 255, 0.04);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  color: var(--text-muted);
+}
+
+.telemetry-badge.telemetry-speed {
+  color: #38bdf8;
+  border-color: rgba(56, 189, 248, 0.25);
+  background: rgba(56, 189, 248, 0.06);
+}
+
+.telemetry-badge.telemetry-vision {
+  color: #c084fc;
+  border-color: rgba(192, 132, 252, 0.25);
+  background: rgba(192, 132, 252, 0.06);
+}
+
+.telemetry-badge.telemetry-llm {
+  color: #a3e635;
+  border-color: rgba(163, 230, 53, 0.25);
+  background: rgba(163, 230, 53, 0.06);
+}
+
+.telemetry-badge.telemetry-safe {
+  color: #34d399;
+  border-color: rgba(52, 211, 153, 0.3);
+  background: rgba(52, 211, 153, 0.08);
+}
+
+/* ==========================================================================
+   11. Privacy Audit & Compliance Panel
+   ========================================================================== */
+.audit-seal-card {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 12px 14px;
+  background: linear-gradient(135deg, rgba(16, 185, 129, 0.12), rgba(6, 95, 70, 0.25));
+  border: 1px solid rgba(16, 185, 129, 0.35);
+  border-radius: var(--radius-md);
+  margin-bottom: 14px;
+  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.3);
+}
+
+.seal-icon-wrap {
+  width: 32px;
+  height: 32px;
+  border-radius: 50%;
+  background: rgba(16, 185, 129, 0.2);
+  border: 1px solid #10b981;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: #10b981;
+  font-size: 16px;
+  flex-shrink: 0;
+}
+
+.seal-content {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  flex: 1;
+}
+
+.seal-title {
+  font-size: 12.5px;
+  font-weight: 700;
+  color: #ffffff;
+}
+
+.seal-subtitle {
+  font-size: 10.5px;
+  color: #6ee7b7;
+}
+
+.seal-badge {
+  font-size: 9.5px;
+  font-weight: 700;
+  padding: 2px 7px;
+  border-radius: var(--radius-full);
+  background: #059669;
+  color: #ffffff;
+  letter-spacing: 0.4px;
+  flex-shrink: 0;
+}
+
+.audit-metrics-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 8px;
+  margin-bottom: 14px;
+}
+
+.audit-metric-card {
+  display: flex;
+  flex-direction: column;
+  padding: 10px 12px;
+  background: var(--bg-surface);
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-sm);
+  gap: 2px;
+}
+
+.audit-metric-val {
+  font-size: 16px;
+  font-weight: 800;
+  color: var(--text-white);
+  font-family: var(--font-mono);
+}
+
+.audit-metric-label {
+  font-size: 10.5px;
+  color: var(--text-muted);
+}
+
+.audit-breakdown-list {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  max-height: 180px;
+  overflow-y: auto;
+  padding-right: 4px;
+}
+
+.audit-breakdown-empty {
+  font-size: 11.5px;
+  color: var(--text-dim);
+  font-style: italic;
+  padding: 8px 0;
+}
+
+.audit-breakdown-item {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 6px 10px;
+  background: rgba(255, 255, 255, 0.03);
+  border: 1px solid rgba(255, 255, 255, 0.06);
+  border-radius: var(--radius-xs);
+  font-size: 11.5px;
+}
+
+.audit-breakdown-name {
+  color: var(--text-secondary);
+}
+
+.audit-breakdown-count {
+  font-family: var(--font-mono);
+  font-weight: 700;
+  color: #10b981;
+  background: rgba(16, 185, 129, 0.12);
+  padding: 1px 6px;
+  border-radius: var(--radius-full);
+  font-size: 10px;
+}
+
+.audit-export-actions {
+  display: flex;
+  gap: 8px;
+  margin-top: 14px;
+  padding-top: 12px;
+  border-top: 1px solid var(--border-subtle);
+}
+
+.btn-audit-export {
+  flex: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  padding: 8px 10px;
+  border-radius: var(--radius-sm);
+  font-size: 11.5px;
+  font-weight: 600;
+  cursor: pointer;
+  border: none;
+  transition: all 0.2s ease;
+}
+
+.btn-export-json {
+  background: #1e293b;
+  border: 1px solid #334155;
+  color: #e2e8f0;
+}
+.btn-export-json:hover {
+  background: #334155;
+  color: #ffffff;
+}
+
+.btn-copy-md {
+  background: linear-gradient(135deg, #059669, #047857);
+  color: #ffffff;
+  box-shadow: 0 2px 8px rgba(16, 185, 129, 0.3);
+}
+.btn-copy-md:hover {
+  background: linear-gradient(135deg, #10b981, #059669);
+  transform: translateY(-1px);
+}

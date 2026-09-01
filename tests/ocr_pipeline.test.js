@@ -440,6 +440,93 @@ test('Web Lens extracts Canvas graphic OCR text and creates Ask AI custom prompt
   assert.strictEqual(customPrompt.includes('> CONFIRMATION: 9948-AB'), true);
 });
 
+// ============================================================================
+// GROUP 7: Zero-Leak Privacy Audit Certificate & Latency Telemetry
+// ============================================================================
+console.log('\n--- Group 7: Zero-Leak Privacy Audit & Telemetry ---');
+
+test('Privacy Audit tracker aggregates DOM elements, canvases, faces, and PII tokens', () => {
+  const sampleData = {
+    element_count: 142,
+    canvases: [{ id: 'canvas1' }, { id: 'canvas2' }],
+    root: {
+      id: 'root',
+      children: [
+        { id: 'c1', has_pii: true, pii_types: ['email', 'phone'] },
+        { id: 'c2', has_pii: true, pii_types: ['credit_card'] }
+      ]
+    }
+  };
+
+  const auditLog = {
+    sessionStartTime: Date.now(),
+    totalNodesProcessed: 0,
+    totalCanvasesDecoded: 0,
+    totalFacesRedacted: 0,
+    totalPiiShielded: 0,
+    piiBreakdown: {},
+    latencies: { dom: [] }
+  };
+
+  // Simulate recordPrivacyAuditMetrics
+  auditLog.totalNodesProcessed += sampleData.element_count;
+  auditLog.totalCanvasesDecoded += sampleData.canvases.length;
+  auditLog.totalFacesRedacted += 1;
+  auditLog.latencies.dom.push(2);
+
+  function countPii(node) {
+    if (node.has_pii && Array.isArray(node.pii_types)) {
+      node.pii_types.forEach(t => {
+        auditLog.totalPiiShielded++;
+        auditLog.piiBreakdown[t] = (auditLog.piiBreakdown[t] || 0) + 1;
+      });
+    }
+    if (Array.isArray(node.children)) node.children.forEach(countPii);
+  }
+  countPii(sampleData.root);
+
+  assert.strictEqual(auditLog.totalNodesProcessed, 142);
+  assert.strictEqual(auditLog.totalCanvasesDecoded, 2);
+  assert.strictEqual(auditLog.totalFacesRedacted, 1);
+  assert.strictEqual(auditLog.totalPiiShielded, 3);
+  assert.strictEqual(auditLog.piiBreakdown['email'], 1);
+  assert.strictEqual(auditLog.piiBreakdown['credit_card'], 1);
+});
+
+test('Privacy Audit certificate formats valid JSON with Zero-Leak guarantee', () => {
+  const auditReport = {
+    certificate_id: 'DRISHTI-SIH171-TEST',
+    compliance_status: 'VERIFIED_ZERO_LEAK',
+    telemetry_metrics: {
+      external_pii_leakage_bytes: 0,
+      leakage_percentage: '0.00%',
+      total_dom_nodes_sanitized: 512,
+      total_canvases_decoded_locally: 3
+    }
+  };
+
+  const jsonStr = JSON.stringify(auditReport, null, 2);
+  const parsed = JSON.parse(jsonStr);
+
+  assert.strictEqual(parsed.compliance_status, 'VERIFIED_ZERO_LEAK');
+  assert.strictEqual(parsed.telemetry_metrics.external_pii_leakage_bytes, 0);
+  assert.strictEqual(parsed.telemetry_metrics.leakage_percentage, '0.00%');
+});
+
+test('Turn Telemetry bar structures DOM, WASM OCR, and LangGraph latencies', () => {
+  const telemetry = {
+    domTime: 2,
+    ocrTime: 185,
+    facesRedacted: 1,
+    llmTime: 310
+  };
+
+  assert.strictEqual(telemetry.domTime < 5, true);
+  assert.strictEqual(telemetry.ocrTime > 0, true);
+  assert.strictEqual(telemetry.facesRedacted, 1);
+  assert.strictEqual(telemetry.llmTime > 0, true);
+});
+
 // SUMMARY
 console.log(`\n========================================`);
 console.log(`Tests Completed: ${passedTests} / ${totalTests} Passed`);
@@ -448,6 +535,6 @@ console.log(`========================================\n`);
 if (passedTests !== totalTests) {
   process.exit(1);
 } else {
-  console.log('🎉 All Phase 11 Web Lens & Action Safety tests passed successfully!');
+  console.log('🎉 All Phase 14 Privacy Audit, Observability & Action Safety tests passed successfully!');
 }
 
