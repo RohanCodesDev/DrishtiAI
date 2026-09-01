@@ -21,7 +21,7 @@
 * **React & Modern SPA Native Input Binding**: Uses prototype descriptor value setters (`setNativeInputValue`) to seamlessly bind input values into React, Vue, and Angular synthetic event components.
 * **Rich Form & Interaction Support**: Full support for `contenteditable` rich text containers, `SELECT` dropdown matching by text/value, checkbox/radio toggles, and high-fidelity 5-stage pointer event click sequences (`simulateClick`).
 * **Instant "Stop Agent" Abort Controller**: User can halt ongoing agent loops at any second via the prominent sidebar `⏹ Stop` button, immediately canceling queued actions and aborting in-flight requests.
-* **High-Risk Action Safeguard**: Automatically scans target elements and planned actions for destructive keywords (delete, purge, payment, reset) and triggers prominent visual amber warning badges in the execution log and overlay HUD.
+* **Human-in-the-Loop (HITL) Interactive Approval Gate**: When the agent encounters a high-risk destructive, financial, or credential action (e.g. database purges, payments, password resets), it automatically pauses the auto-loop, scrolls the element into view with an amber overlay, and presents a prominent interactive **Approval Card** (`[ ✅ Approve & Execute ]` / `[ ❌ Reject / Abort ]`) in the chat interface. The content script physically enforces this gate by refusing execution unless explicitly approved by the user.
 * **New Tab Synthetic DOM & Autonomous Navigation**: Handles `chrome://newtab` and blank/restricted tabs by generating synthetic structured DOM context and executing `NAVIGATE` actions directly via `chrome.tabs.update` in the background worker with live post-navigation DOM re-extraction.
 
 ### File Directory & Purpose
