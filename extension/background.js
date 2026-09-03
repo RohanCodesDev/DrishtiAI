@@ -270,6 +270,33 @@ async function captureAndRunOCR(targetTabId, config = null, canvases = []) {
   }
 }
 
+// Helper: Fast direct canvas graphic decoding without full-viewport screenshot capture
+async function decodeCanvasesDirect(canvases = [], config = null) {
+  if (!canvases || !Array.isArray(canvases) || canvases.length === 0) return '';
+  try {
+    await ensureOffscreenDocument();
+    let text = '';
+    for (const c of canvases) {
+      if (!c.dataUrl) continue;
+      const res = await new Promise((resolve) => {
+        chrome.runtime.sendMessage({
+          target: 'offscreen',
+          type: 'RUN_CANVAS_OCR_DIRECT',
+          dataUrl: c.dataUrl,
+          config: config
+        }, (r) => resolve(r));
+      });
+      if (res && res.success && res.text) {
+        text += `\n[CANVAS GRAPHIC #${c.id}]:\n${res.text}\n`;
+      }
+    }
+    return text.trim();
+  } catch (e) {
+    console.warn('[DrishtiAI Background] Fast canvas decoding skipped:', e);
+    return '';
+  }
+}
+
 // Listen for messages from tab-specific sidebar
 chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
   if (message && (message.type === 'GET_DOM' || message.type === 'GET_PAGE_CONTEXT')) {
@@ -279,7 +306,16 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
         const domData = await getTabDOM(message.tabId, message.config);
         
         if (!domData.is_restricted) {
-          domData.visual_context = await captureAndRunOCR(message.tabId, message.config, domData.canvases);
+          if (message.skip_ocr) {
+            console.log('[DrishtiAI Background] ⚡ Fast path: Bypassing heavy viewport OCR.');
+            if (domData.canvases && domData.canvases.length > 0) {
+              domData.visual_context = await decodeCanvasesDirect(domData.canvases, message.config);
+            } else {
+              domData.visual_context = '';
+            }
+          } else {
+            domData.visual_context = await captureAndRunOCR(message.tabId, message.config, domData.canvases);
+          }
         }
         
         console.log(`[DrishtiAI Background] ✅ Context Packaged: ${domData.element_count} elements, OCR text length: ${domData.visual_context?.length || 0}`);

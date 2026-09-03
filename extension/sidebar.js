@@ -681,9 +681,9 @@ ${piiRows}
     applyDOMSearchOrRaw();
   }
 
-  async function loadBoundTabDOM() {
-    if (jsonOutput) jsonOutput.textContent = 'Extracting structured DOM for active tab...';
-    if (elementCountBadge) {
+  async function loadBoundTabDOM(skipOcr = false) {
+    if (jsonOutput && !skipOcr) jsonOutput.textContent = 'Extracting structured DOM for active tab...';
+    if (elementCountBadge && !skipOcr) {
       elementCountBadge.querySelector('.badge-text').textContent = 'Extracting...';
     }
 
@@ -725,7 +725,8 @@ ${piiRows}
         chrome.runtime.sendMessage({
           type: 'GET_DOM',
           tabId: tabId,
-          config: UI_STATE.firewallConfig
+          config: UI_STATE.firewallConfig,
+          skip_ocr: skipOcr
         }, (res) => {
           if (chrome.runtime.lastError) {
             console.error("Native Messaging Error:", chrome.runtime.lastError);
@@ -1453,6 +1454,24 @@ ${piiRows}
   async function executeAgentStep(loopCount = 1, actionHistory = []) {
     if (!UI_STATE.isAgentRunning || !UI_STATE.currentTurn) return;
 
+    // Fast-path: Check if current tab is a form submission confirmation page
+    const curUrl = UI_STATE.activePage?.url || '';
+    const curTitle = (UI_STATE.activePage?.title || '').toLowerCase();
+    if (curUrl.includes('/formResponse') || curTitle.includes('response has been recorded') || curTitle.includes('thank you for submitting')) {
+      if (UI_STATE.currentTurn) {
+        UI_STATE.currentTurn.status = 'completed';
+        UI_STATE.currentTurn.statusMessage = 'Form submitted successfully';
+        if (!UI_STATE.currentTurn.finalAnswer) {
+          UI_STATE.currentTurn.finalAnswer = 'Form submitted successfully. Your response has been recorded.';
+        }
+        renderAllChatHistory();
+        saveChatHistory();
+      }
+      updateAgentStatus('READY', 'Ready');
+      setAgentRunningState(false);
+      return;
+    }
+
     if (loopCount > 10) {
       if (UI_STATE.currentTurn) {
         UI_STATE.currentTurn.status = 'completed';
@@ -1602,7 +1621,7 @@ ${piiRows}
               break; // Stop executing remaining actions from the old page batch
             } else if (ai.action === 'SCROLL' && success) {
               await cancellableDelay(150);
-              await loadBoundTabDOM();
+              await loadBoundTabDOM(true);
             }
 
             await cancellableDelay(100);
@@ -1610,28 +1629,13 @@ ${piiRows}
 
           renderAllChatHistory();
         }
-      } else if (result.error === 'RATE_LIMIT_EXCEEDED') {
-        UI_STATE.currentTurn.statusMessage = 'Rate limit reached. Backing off for 6s…';
-        updateAgentStatus('WAITING', 'Backing off...');
+      } else if (result.error === 'RATE_LIMIT_EXCEEDED' || (typeof result.error === 'string' && (result.error.includes('413') || result.error.includes('rate_limit')))) {
+        UI_STATE.currentTurn.status = 'error';
+        UI_STATE.currentTurn.error = result.message || 'Groq API rate limit or token payload exceeded (8,000 TPM limit). Halting execution to prevent rate limit penalties.';
+        setAgentRunningState(false);
         renderAllChatHistory();
-
-        if (autoLoopCb && autoLoopCb.checked) {
-          pendingLoopTimer = setTimeout(async () => {
-            pendingLoopTimer = null;
-            if (!UI_STATE.isAgentRunning) return;
-            await loadBoundTabDOM();
-            if (!UI_STATE.isAgentRunning) return;
-            executeAgentStep(loopCount, actionHistory);
-          }, 6000);
-          return;
-        } else {
-          UI_STATE.currentTurn.status = 'error';
-          UI_STATE.currentTurn.error = 'Rate limit reached.';
-          setAgentRunningState(false);
-          renderAllChatHistory();
-          saveChatHistory();
-          return;
-        }
+        saveChatHistory();
+        return;
       } else {
         UI_STATE.currentTurn.status = 'error';
         UI_STATE.currentTurn.error = result.error || result.message || 'Execution error encountered.';
@@ -1650,10 +1654,10 @@ ${piiRows}
         pendingLoopTimer = setTimeout(async () => {
           pendingLoopTimer = null;
           if (!UI_STATE.isAgentRunning) return;
-          await loadBoundTabDOM();
+          await loadBoundTabDOM(true); // Pass true to skip heavy viewport OCR during intermediate steps!
           if (!UI_STATE.isAgentRunning) return;
           executeAgentStep(loopCount + 1, actionHistory);
-        }, 1200);
+        }, 800);
       } else {
         UI_STATE.currentTurn.status = 'completed';
         updateAgentStatus('READY', 'Ready');

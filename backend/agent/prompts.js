@@ -23,11 +23,30 @@ ACTION VOCABULARY:
 - value: "<string>" (text to type, key name like "Enter", URL/query to navigate, scroll direction, or reply message)
 - reason: "<string>" (a brief explanation of why you chose this action)
 
+BATCH ACTIONS & FORM FILLING (CRITICAL FOR PERFORMANCE):
+- When filling forms, entering dummy/test data, surveys, or multi-field forms on the current page:
+  - Plan and output ALL the actions to fill the visible unfilled fields together in logical sequence in a single response array ("actions": [...])!
+  - Example: [
+      { "action": "TYPE", "target_id": "element_81", "value": "Jane Doe", "reason": "Fill attendee name" },
+      { "action": "TYPE", "target_id": "element_68", "value": "test@example.com", "reason": "Fill email" },
+      { "action": "TYPE", "target_id": "element_95", "value": "1234567890", "reason": "Fill phone number" },
+      { "action": "CLICK", "target_id": "element_112", "reason": "Select RSVP option" },
+      { "action": "DONE", "reason": "All visible form fields filled with dummy data" }
+    ]
+  - Do NOT output only one field per step when multiple fields are visible simultaneously.
+  - Only pause or wait for a fresh observation if an action triggers navigation, page reload, or modal popup.
+
+FORM COMPLETION & TERMINATION GUIDELINES:
+1. If the user's objective is to "fill the form" or "fill with dummy data" (without explicit instructions to "submit"):
+   - Fill all visible, unfilled fields and conclude with a "DONE" action.
+   - Example: { "action": "DONE", "reason": "All visible fields filled with dummy data. Ready for user review." }
+2. If the current page URL contains "/formResponse" or the page displays confirmation text ("Your response has been recorded", "Submitted", "Thank you"):
+   - The form is already submitted! Immediately output "action": "DONE". Do NOT attempt further clicks or navigation.
+3. If all required and visible fields already have values (or [REDACTED] tokens indicating existing data), DO NOT re-fill or overwrite them; output "action": "DONE".
+4. NEVER repeat an action on an element ID listed in "COMPLETED TARGETS" or recent action history.
+
 KEYBOARD & FORM INTERACTIONS:
 - For search inputs and single-field forms where pressing Enter submits the query, you can issue a "KEYPRESS" action with "value": "Enter" on the input target_id.
-
-CRITICAL INSTRUCTION FOR MULTI-STEP OBJECTIVES: 
-If the objective contains multiple steps, you must look at the current DOM state to determine which steps have already been completed, and output ONLY the action for the NEXT uncompleted step. Do not repeat completed actions.
 
 CRITICAL RULES FOR INFORMATION RETRIEVAL, QUESTIONS & UNSTRUCTURED TEXT:
 1. UNSTRUCTURED / RANDOM TEXT / DEFINITIONS: If the user enters raw text, a pasted quote (e.g. from the page or Web Lens), a single term/concept, or random text without explicit automation instructions (like "click", "fill", "type", "navigate"):
@@ -62,13 +81,75 @@ function compressTree(node) {
 }
 
 /**
+ * Compacts a large DOM tree to keep only interactive elements, inputs, forms,
+ * buttons, labels, and semantic headings when element count is high.
+ */
+function compactInteractiveDom(node, depth = 0) {
+  if (!node) return null;
+
+  const tag = (node.tag || '').toLowerCase();
+  const isFormTag = ['input', 'textarea', 'select', 'button', 'form', 'label', 'option', 'fieldset'].includes(tag);
+  const isInteractive = node.interactive || isFormTag || ['button', 'textbox', 'checkbox', 'radio', 'combobox', 'listbox', 'link', 'menuitem'].includes(node.role);
+  const isHeading = ['h1', 'h2', 'h3', 'h4', 'h5', 'h6'].includes(tag);
+  const hasText = typeof node.text === 'string' && node.text.trim().length > 0;
+
+  let children = [];
+  if (node.children && Array.isArray(node.children)) {
+    children = node.children.map(child => compactInteractiveDom(child, depth + 1)).filter(Boolean);
+  }
+
+  // Drop empty, non-interactive layout containers
+  if (!isInteractive && !isHeading && !hasText && children.length === 0) {
+    return null;
+  }
+
+  // If a non-interactive layout container has exactly 1 interactive child, hoist the child
+  const isLayoutWrapper = ['div', 'span', 'section', 'article', 'main'].includes(tag) && !isInteractive && !hasText && !node.role;
+  if (isLayoutWrapper && children.length === 1) {
+    return children[0];
+  }
+
+  const clone = { id: node.id, tag: node.tag };
+  if (node.role) clone.role = node.role;
+  if (hasText) clone.text = node.text.length > 100 ? node.text.slice(0, 100) + '...' : node.text;
+  if (node.interactive || isInteractive) clone.interactive = true;
+  if (node.has_pii) clone.has_pii = true;
+  if (node.attributes && Object.keys(node.attributes).length > 0) {
+    // Only retain essential attributes for token efficiency
+    const cleanAttrs = {};
+    const keepKeys = ['type', 'placeholder', 'name', 'value', 'checked', 'required', 'disabled', 'href', 'role', 'aria-label'];
+    for (const key of keepKeys) {
+      if (node.attributes[key] !== undefined) cleanAttrs[key] = node.attributes[key];
+    }
+    if (Object.keys(cleanAttrs).length > 0) clone.attributes = cleanAttrs;
+  }
+  if (children.length > 0) {
+    clone.children = children;
+  }
+
+  return clone;
+}
+
+/**
  * Builds the user prompt integrating the sanitized DOM, user task, and recent action history.
+ * Enforces strict token budgeting so prompts fit well within Groq rate limits (8000 TPM).
  */
 function buildUserPrompt(domData, userTask = "No specific task provided. Just analyze the state.", actionHistory = []) {
   let prompt = `AGENT OBJECTIVE: ${userTask}\n\n`;
   
   if (actionHistory && actionHistory.length > 0) {
-    // Keep only the most recent 4 steps to prevent token bloat
+    // Collect all completed target IDs across entire history to prevent loops
+    const completedTargets = Array.from(new Set(
+      actionHistory
+        .filter(step => step.execution_result && step.execution_result.includes('SUCCESS') && step.target && step.target !== 'N/A' && step.target !== 'USER')
+        .map(step => step.target)
+    ));
+
+    if (completedTargets.length > 0) {
+      prompt += `COMPLETED TARGETS (ALREADY FILLED/CLICKED - DO NOT RE-TARGET): ${completedTargets.join(', ')}\n\n`;
+    }
+
+    // Keep only the most recent 4 steps for detailed step logs to prevent token bloat
     const recentHistory = actionHistory.slice(-4);
     prompt += `RECENT ACTIONS TAKEN:\n`;
     recentHistory.forEach((step, idx) => {
@@ -77,20 +158,39 @@ function buildUserPrompt(domData, userTask = "No specific task provided. Just an
     prompt += `\nDo NOT repeat successful actions. If an action failed, try an alternative.\n\n`;
   }
 
-  // Compress DOM tree to stay well under token rate limits
-  const cleanDom = {
+  // Token-budgeted DOM compression
+  const rawRoot = domData.root || null;
+  const elementCount = domData.element_count || 0;
+
+  // If page is large (> 60 elements), apply compact interactive pruning to guarantee low token usage
+  let processedRoot = compressTree(rawRoot);
+  let stringifiedDom = JSON.stringify({
     url: domData.url,
     title: domData.title,
-    element_count: domData.element_count,
-    root: compressTree(domData.root)
-  };
+    element_count: elementCount,
+    root: processedRoot
+  });
 
-  prompt += `Analyze the following webpage structure and determine the next action to achieve the objective.\n\nDOM DATA:\n${JSON.stringify(cleanDom)}`;
+  // If serialized DOM exceeds ~10KB (~2,500 tokens), compact aggressively
+  if (stringifiedDom.length > 10000 || elementCount > 80) {
+    processedRoot = compactInteractiveDom(rawRoot) || processedRoot;
+    stringifiedDom = JSON.stringify({
+      url: domData.url,
+      title: domData.title,
+      element_count: elementCount,
+      root: processedRoot
+    });
+  }
+
+  prompt += `Analyze the following webpage structure and determine the next action to achieve the objective.\n\nDOM DATA:\n${stringifiedDom}`;
   
   if (domData.visual_context) {
-    // Cap visual context to prevent token overflows while preserving key text
-    const visualText = domData.visual_context.length > 3000
-      ? domData.visual_context.slice(0, 3000) + '... [truncated]'
+    // If canvas graphics exist, preserve canvas text; otherwise cap OCR text
+    const hasCanvasText = domData.visual_context.includes('[CANVAS GRAPHIC');
+    const maxOcrLength = hasCanvasText ? 1500 : 800;
+    
+    const visualText = domData.visual_context.length > maxOcrLength
+      ? domData.visual_context.slice(0, maxOcrLength) + '... [truncated]'
       : domData.visual_context;
 
     prompt += `\n\nVISUAL OCR DATA (Text extracted locally from screenshot of visible viewport):\n"""\n${visualText}\n"""\nNOTE: The OCR data contains text visually visible on screen (including Canvas, images, and obfuscated text). If an element is off-screen, you MUST use "SCROLL" to bring it into view.`;
@@ -102,5 +202,6 @@ function buildUserPrompt(domData, userTask = "No specific task provided. Just an
 module.exports = {
   AGENT_SYSTEM_PROMPT,
   compressTree,
+  compactInteractiveDom,
   buildUserPrompt
 };

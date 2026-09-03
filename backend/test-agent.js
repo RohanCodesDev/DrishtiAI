@@ -12,7 +12,7 @@
 
 const assert = require('assert');
 const http = require('http');
-const { compressTree, buildUserPrompt, AGENT_SYSTEM_PROMPT } = require('./agent/prompts');
+const { compressTree, compactInteractiveDom, buildUserPrompt, AGENT_SYSTEM_PROMPT } = require('./agent/prompts');
 const { SingleActionSchema, ActionResponseSchema, validateActions, collectElementIds } = require('./agent/actions');
 const { DRISHTI_TOOLS } = require('./agent/tools');
 const { runAgentGraph } = require('./agent/graph');
@@ -454,6 +454,92 @@ async function main() {
     assert.ok(action.action === 'REPLY' || action.action === 'DONE');
     assert.ok(action.value && (action.value.includes('9948-AB') || action.value.includes('9948')));
     console.log(`     -> Visual OCR Reasoning Answer: ${action.value}`);
+  });
+
+  // TEST GROUP 8: Fast Form-Filling, Completion & Token Budgeting
+  console.log('\n--- TEST GROUP 8: Fast Form-Filling, Completion & Token Budgeting ---');
+
+  runTest('Agent system prompt contains batch form-filling and completion guidelines', () => {
+    assert.ok(AGENT_SYSTEM_PROMPT.includes('BATCH ACTIONS & FORM FILLING'));
+    assert.ok(AGENT_SYSTEM_PROMPT.includes('FORM COMPLETION & TERMINATION GUIDELINES'));
+    assert.ok(AGENT_SYSTEM_PROMPT.includes('/formResponse'));
+  });
+
+  runTest('compactInteractiveDom prunes 1,000+ element layout tree to compact token size', () => {
+    // Generate a synthetic tree with 1,000 deep non-interactive wrapper divs
+    const bigTree = {
+      id: 'root_0',
+      tag: 'body',
+      children: []
+    };
+
+    let current = bigTree;
+    for (let i = 1; i <= 990; i++) {
+      const wrapper = {
+        id: `element_${i}`,
+        tag: 'div',
+        children: []
+      };
+      current.children.push(wrapper);
+      current = wrapper;
+    }
+
+    // Add actual interactive form elements inside
+    current.children.push({
+      id: 'element_991',
+      tag: 'input',
+      interactive: true,
+      attributes: { type: 'text', name: 'fullname', placeholder: 'Enter name' }
+    });
+    current.children.push({
+      id: 'element_992',
+      tag: 'input',
+      interactive: true,
+      attributes: { type: 'email', name: 'email', placeholder: 'Enter email' }
+    });
+    current.children.push({
+      id: 'element_993',
+      tag: 'button',
+      interactive: true,
+      text: 'Submit'
+    });
+
+    const compacted = compactInteractiveDom(bigTree);
+    const serialized = JSON.stringify(compacted);
+    // Serialized compact representation must be concise (< 4,000 chars / ~1,000 tokens)
+    assert.ok(serialized.length < 4000, `Serialized size was ${serialized.length}`);
+    assert.ok(serialized.includes('element_991'));
+    assert.ok(serialized.includes('element_992'));
+    assert.ok(serialized.includes('element_993'));
+  });
+
+  runTest('Prompt builder formats COMPLETED TARGETS to prevent re-filling elements', () => {
+    const history = [
+      { action: 'TYPE', target: 'element_95', value: '1234567890', execution_result: 'SUCCESS' },
+      { action: 'TYPE', target: 'element_68', value: 'test@example.com', execution_result: 'SUCCESS' }
+    ];
+    const prompt = buildUserPrompt(sampleSanitizedDom, 'fill form', history);
+    assert.ok(prompt.includes('COMPLETED TARGETS (ALREADY FILLED/CLICKED - DO NOT RE-TARGET): element_95, element_68'));
+  });
+
+  await runAsyncTest('LangGraph fast-paths form submission confirmation to DONE without LLM calls', async () => {
+    const confirmationPayload = {
+      url: 'https://docs.google.com/forms/d/e/1FAIpQLSeSn-nAhXOnIqIAs0OI0sJeeNNZ9I99kLDNxEEe4jcSaSgIjA/formResponse',
+      title: 'Your response has been recorded.',
+      element_count: 50,
+      root: {
+        id: 'element_0',
+        tag: 'body',
+        children: []
+      },
+      userTask: 'fill the form with dummy data',
+      actionHistory: []
+    };
+
+    const finalState = await runAgentGraph(confirmationPayload);
+    assert.strictEqual(finalState.isDone, true);
+    assert.strictEqual(finalState.validatedActions.length, 1);
+    assert.strictEqual(finalState.validatedActions[0].action, 'DONE');
   });
 
   console.log('\n======================================================');

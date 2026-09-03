@@ -2,7 +2,7 @@ const { StateGraph } = require('@langchain/langgraph');
 const { ChatGroq } = require('@langchain/groq');
 const { HumanMessage, SystemMessage } = require('@langchain/core/messages');
 const { AgentStateAnnotation } = require('./state');
-const { AGENT_SYSTEM_PROMPT, buildUserPrompt, compressTree } = require('./prompts');
+const { AGENT_SYSTEM_PROMPT, buildUserPrompt, compressTree, compactInteractiveDom } = require('./prompts');
 const { ActionResponseSchema, validateActions } = require('./actions');
 
 /**
@@ -44,6 +44,22 @@ async function reasonNode(state) {
   console.log(`[DRISHTI] REASON - Model: ${modelName}`);
   console.log(`[DRISHTI] Objective: "${state.objective || 'None'}"`);
 
+  // Fast-path: Check for form submission completion page
+  const pageUrl = state.url || '';
+  const pageTitle = (state.title || '').toLowerCase();
+  if (pageUrl.includes('/formResponse') || pageTitle.includes('response has been recorded') || pageTitle.includes('thank you for')) {
+    console.log('[DRISHTI] Form submission confirmation detected on page. Terminating with DONE.');
+    return {
+      plannedActions: [{
+        action: 'DONE',
+        reason: 'Form submission completed. Confirmation page reached.'
+      }],
+      summaryReason: 'Form submitted successfully.',
+      isDone: true,
+      logs: ['[REASON] Form submission confirmation detected on page']
+    };
+  }
+
   if (!process.env.GROQ_API_KEY) {
     console.error('[DRISHTI] ERROR: GROQ_API_KEY is not configured in backend/.env');
     return {
@@ -62,7 +78,7 @@ async function reasonNode(state) {
     temperature: 0
   });
 
-  const userPromptText = buildUserPrompt(
+  let userPromptText = buildUserPrompt(
     state.rawDom || { url: state.url, title: state.title, element_count: state.elementCount, root: state.compressedDom },
     state.objective,
     state.actionHistory
@@ -84,34 +100,88 @@ async function reasonNode(state) {
       summaryReason = response.summary_reason || '';
     }
   } catch (structuredErr) {
-    console.warn('[DRISHTI] withStructuredOutput error, falling back to direct JSON prompt:', structuredErr.message);
+    console.warn('[DRISHTI] withStructuredOutput error, evaluating fallback:', structuredErr.message);
 
-    // Fallback: Direct invocation with strict schema prompting and Zod validation
-    try {
-      const completion = await llm.invoke([
-        new SystemMessage(AGENT_SYSTEM_PROMPT),
-        new HumanMessage(userPromptText)
-      ]);
+    const isPayloadOrRateLimit = structuredErr.message && (
+      structuredErr.message.includes('413') || 
+      structuredErr.message.includes('Request too large') || 
+      structuredErr.message.includes('rate_limit_exceeded') || 
+      structuredErr.message.includes('TPM')
+    );
 
-      const content = typeof completion.content === 'string' ? completion.content : JSON.stringify(completion.content);
-      const jsonMatch = content.match(/\{[\s\S]*\}|\[[\s\S]*\]/);
-      if (jsonMatch) {
-        const parsed = JSON.parse(jsonMatch[0]);
-        if (Array.isArray(parsed.actions)) {
-          candidateActions = parsed.actions;
-        } else if (parsed.action) {
-          candidateActions = [parsed];
-        } else if (Array.isArray(parsed)) {
-          candidateActions = parsed;
+    // If payload too large, apply emergency ultra-compaction (form elements only) and retry once
+    if (isPayloadOrRateLimit) {
+      console.warn('[DRISHTI] Payload exceeded model TPM limit. Applying emergency DOM compaction and retrying...');
+      try {
+        const ultraCompact = {
+          url: state.url,
+          title: state.title,
+          element_count: state.elementCount,
+          root: compactInteractiveDom(state.rawDom?.root || state.compressedDom)
+        };
+        // Omit visual context to strictly save tokens
+        ultraCompact.visual_context = '';
+        userPromptText = buildUserPrompt(ultraCompact, state.objective, state.actionHistory);
+
+        const fallbackCompletion = await llm.invoke([
+          new SystemMessage(AGENT_SYSTEM_PROMPT),
+          new HumanMessage(userPromptText)
+        ]);
+
+        const content = typeof fallbackCompletion.content === 'string' ? fallbackCompletion.content : JSON.stringify(fallbackCompletion.content);
+        const jsonMatch = content.match(/\{[\s\S]*\}|\[[\s\S]*\]/);
+        if (jsonMatch) {
+          const parsed = JSON.parse(jsonMatch[0]);
+          if (Array.isArray(parsed.actions)) {
+            candidateActions = parsed.actions;
+          } else if (parsed.action) {
+            candidateActions = [parsed];
+          } else if (Array.isArray(parsed)) {
+            candidateActions = parsed;
+          }
         }
+      } catch (retryErr) {
+        console.error('[DRISHTI] Emergency compaction retry failed:', retryErr.message);
+        // Do NOT loop WAIT 2000ms on rate limits; finish cleanly to avoid infinite spinning
+        return {
+          plannedActions: [{
+            action: 'DONE',
+            reason: 'Groq API token limit exceeded (8,000 TPM limit). Halting execution to prevent infinite retries.'
+          }],
+          summaryReason: 'Rate limit or token payload exceeded on Groq API.',
+          error: 'RATE_LIMIT_EXCEEDED',
+          isDone: true,
+          logs: ['[REASON] Halting due to Groq rate limit / token payload limit']
+        };
       }
-    } catch (fallbackErr) {
-      console.error('[DRISHTI] Direct fallback parsing also failed:', fallbackErr.message);
-      candidateActions = [{
-        action: 'WAIT',
-        value: '2000ms',
-        reason: 'Failed to obtain structured action plan from LLM.'
-      }];
+    } else {
+      // Fallback: Direct invocation with strict schema prompting and Zod validation
+      try {
+        const completion = await llm.invoke([
+          new SystemMessage(AGENT_SYSTEM_PROMPT),
+          new HumanMessage(userPromptText)
+        ]);
+
+        const content = typeof completion.content === 'string' ? completion.content : JSON.stringify(completion.content);
+        const jsonMatch = content.match(/\{[\s\S]*\}|\[[\s\S]*\]/);
+        if (jsonMatch) {
+          const parsed = JSON.parse(jsonMatch[0]);
+          if (Array.isArray(parsed.actions)) {
+            candidateActions = parsed.actions;
+          } else if (parsed.action) {
+            candidateActions = [parsed];
+          } else if (Array.isArray(parsed)) {
+            candidateActions = parsed;
+          }
+        }
+      } catch (fallbackErr) {
+        console.error('[DRISHTI] Direct fallback parsing also failed:', fallbackErr.message);
+        candidateActions = [{
+          action: 'WAIT',
+          value: '2000ms',
+          reason: 'Failed to obtain structured action plan from LLM.'
+        }];
+      }
     }
   }
 

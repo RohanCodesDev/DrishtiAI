@@ -55,10 +55,14 @@ async function detectAndRedactFaces(dataUrl, config) {
     img.onload = async () => {
       try {
         const canvas = document.getElementById('vision-canvas') || document.createElement('canvas');
-        canvas.width = img.naturalWidth || img.width;
-        canvas.height = img.naturalHeight || img.height;
+        const naturalW = img.naturalWidth || img.width;
+        const naturalH = img.naturalHeight || img.height;
+        // Cap max width to 1280px to speed up Tesseract OCR by up to 5x without losing text legibility
+        const scale = naturalW > 1280 ? (1280 / naturalW) : 1;
+        canvas.width = Math.round(naturalW * scale);
+        canvas.height = Math.round(naturalH * scale);
         const ctx = canvas.getContext('2d');
-        ctx.drawImage(img, 0, 0);
+        ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
 
         let detectedFaces = [];
 
