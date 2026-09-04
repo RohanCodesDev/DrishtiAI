@@ -793,14 +793,55 @@ ${piiRows}
   }
 
   // ==========================================================================
-  // DOM JSON Search Engine
+  // DOM JSON Search Engine & Syntax Highlighting
   // ==========================================================================
+  function syntaxHighlightJson(jsonString, searchQuery = '') {
+    if (!jsonString) return '';
+    const escaped = escapeHtml(jsonString);
+
+    let highlighted = escaped.replace(
+      /("(\\u[a-zA-Z0-9]{4}|\\[^u]|[^\\"])*"(\s*:)?|\b(true|false|null)\b|-?\d+(?:\.\d*)?(?:[eE][+\-]?\d+)?)/g,
+      function (match) {
+        let cls = 'json-number';
+        if (/^"/.test(match)) {
+          if (/:$/.test(match)) {
+            cls = 'json-key';
+          } else {
+            cls = 'json-string';
+          }
+        } else if (/true|false/.test(match)) {
+          cls = 'json-boolean';
+        } else if (/null/.test(match)) {
+          cls = 'json-null';
+        }
+        return `<span class="${cls}">${match}</span>`;
+      }
+    );
+
+    if (searchQuery) {
+      try {
+        const safeQ = escapeRegex(escapeHtml(searchQuery));
+        const queryRegex = new RegExp(`(?![^<]*>)(${safeQ})`, 'gi');
+        let matchIdx = 0;
+        highlighted = highlighted.replace(queryRegex, (m) => {
+          const mark = `<mark class="search-match" data-match-idx="${matchIdx}">${m}</mark>`;
+          matchIdx++;
+          return mark;
+        });
+      } catch (err) {
+        console.warn('Search query regex failed:', err);
+      }
+    }
+
+    return highlighted;
+  }
+
   function applyDOMSearchOrRaw() {
     if (!jsonOutput) return;
 
     const query = domSearchInput ? domSearchInput.value.trim() : '';
     if (!query || !UI_STATE.currentJsonText) {
-      jsonOutput.textContent = UI_STATE.currentJsonText || 'No DOM structure loaded.';
+      jsonOutput.innerHTML = syntaxHighlightJson(UI_STATE.currentJsonText) || 'No DOM structure loaded.';
       if (domSearchCount) domSearchCount.textContent = '0 matches';
       if (domSearchPrevBtn) domSearchPrevBtn.disabled = true;
       if (domSearchNextBtn) domSearchNextBtn.disabled = true;
@@ -810,20 +851,7 @@ ${piiRows}
     }
 
     try {
-      const regex = new RegExp(`(${escapeRegex(query)})`, 'gi');
-      const parts = UI_STATE.currentJsonText.split(regex);
-      
-      let matchIdx = 0;
-      const htmlParts = parts.map((part) => {
-        if (regex.test(part)) {
-          const mHtml = `<mark class="search-match" data-match-idx="${matchIdx}">${escapeHtml(part)}</mark>`;
-          matchIdx++;
-          return mHtml;
-        }
-        return escapeHtml(part);
-      });
-
-      jsonOutput.innerHTML = htmlParts.join('');
+      jsonOutput.innerHTML = syntaxHighlightJson(UI_STATE.currentJsonText, query);
       UI_STATE.searchMatches = Array.from(jsonOutput.querySelectorAll('.search-match'));
 
       if (UI_STATE.searchMatches.length > 0) {
@@ -839,7 +867,7 @@ ${piiRows}
       }
     } catch (e) {
       console.warn('Search regex error:', e);
-      jsonOutput.textContent = UI_STATE.currentJsonText;
+      jsonOutput.innerHTML = syntaxHighlightJson(UI_STATE.currentJsonText);
     }
   }
 
@@ -2285,6 +2313,9 @@ ${piiRows}
       await loadChatHistory(tabId);
     }
     loadBoundTabDOM();
+    if (taskInput) {
+      setTimeout(() => taskInput.focus(), 60);
+    }
   }
 
   document.addEventListener('DOMContentLoaded', init);

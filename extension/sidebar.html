@@ -13,18 +13,8 @@
     <!-- HEADER -->
     <header class="header" role="banner">
       <div class="brand">
-        <div class="brand-logo" aria-hidden="true">
-          <i class="ti ti-eye-bolt"></i>
-        </div>
-        <div class="brand-text">
-          <span class="brand-name">DrishtiAI</span>
-          <span class="brand-tag">AGENT</span>
-        </div>
-      </div>
-
-      <!-- Live Dynamic Agent Status Indicator -->
-      <div class="header-center">
-        <div id="agent-status-badge" class="status-badge status-ready" title="Current Agent Status" aria-live="polite">
+        <span class="brand-name">Drishti</span>
+        <div id="agent-status-badge" class="status-badge status-ready" title="Agent status" aria-live="polite">
           <span class="status-indicator-dot"></span>
           <span id="agent-status-text" class="status-text">Ready</span>
         </div>
@@ -32,31 +22,25 @@
 
       <!-- Header Action Controls -->
       <div class="header-actions">
-        <button id="inspect-lens-btn" class="icon-btn-header btn-lens" title="Click-to-Inspect Web Lens (Hover & select element)" aria-label="Web Lens Inspector">
-          <i class="ti ti-scan"></i>
-        </button>
-        <button id="new-chat-btn" class="icon-btn-header" title="New Chat / Clear Conversation" aria-label="New Chat">
+        <button id="new-chat-btn" class="icon-btn-header" title="New Chat" aria-label="New Chat">
           <i class="ti ti-plus"></i>
         </button>
-        <button id="refresh-btn" class="icon-btn-header" title="Refresh Page Context & DOM" aria-label="Refresh Page Context">
-          <i class="ti ti-refresh"></i>
+        <button id="settings-toggle-btn" class="icon-btn-header" title="Settings & Privacy Firewall" aria-label="Settings and Inspector">
+          <i class="ti ti-adjustments-horizontal"></i>
         </button>
-        <button id="settings-toggle-btn" class="icon-btn-header" title="Privacy Firewall & DOM Inspector" aria-label="Settings and Inspector">
-          <i class="ti ti-settings"></i>
-        </button>
+        <!-- Retained for backward JS compatibility -->
+        <button id="inspect-lens-btn" style="display: none;" aria-hidden="true"></button>
+        <button id="refresh-btn" style="display: none;" aria-hidden="true"></button>
       </div>
     </header>
 
     <!-- CURRENT PAGE CONTEXT BAR -->
     <section class="context-bar" aria-label="Current Page Context">
       <div class="context-pill">
-        <div class="context-domain-icon" aria-hidden="true">
-          <i class="ti ti-world"></i>
-        </div>
-        <div class="context-details">
-          <span class="context-domain" id="page-domain">Detecting page...</span>
-          <span class="context-title" id="page-title">Detecting active page...</span>
-        </div>
+        <i class="ti ti-world context-domain-icon" aria-hidden="true"></i>
+        <span class="context-domain" id="page-domain">Detecting page...</span>
+        <span class="context-sep">·</span>
+        <span class="context-title" id="page-title">Detecting active page...</span>
       </div>
       <button id="element-count-badge" class="count-badge" title="Click to inspect extracted DOM elements">
         <span class="badge-dot"></span>
@@ -70,60 +54,30 @@
       <!-- WELCOME / EMPTY STATE SCREEN -->
       <div id="welcome-screen" class="welcome-screen">
         <div class="welcome-hero">
-          <div class="welcome-avatar-wrap">
-            <div class="welcome-icon-box">
-              <i class="ti ti-sparkles"></i>
-            </div>
-            <div class="welcome-glow-ring"></div>
-          </div>
-          <h1 class="welcome-heading">How can Drishti help on this page?</h1>
-          <p class="welcome-subtext">Autonomous AI browser agent equipped with on-device Privacy Firewall protection.</p>
+          <h1 class="welcome-heading">How can Drishti help?</h1>
+          <p class="welcome-subtext">On-device privacy firewall active. Sensitive data stays on your device.</p>
         </div>
 
         <div class="quick-prompts-group">
-          <div class="quick-prompts-header">
-            <span class="quick-prompts-title">Suggested Tasks</span>
-            <span class="quick-prompts-hint">Click to run or edit</span>
-          </div>
           <div class="quick-chips-grid">
-            <button class="quick-chip" data-prompt="Fill out the form fields on this page with realistic mock data and submit." aria-label="Fill out form and submit">
-              <div class="chip-icon-wrap">
-                <i class="ti ti-forms"></i>
-              </div>
-              <div class="chip-content">
-                <span class="chip-title">Fill out form & submit</span>
-                <span class="chip-desc">Auto-detect input fields and complete action</span>
-              </div>
+            <button class="quick-chip" data-prompt="Summarize the structure and main content of this webpage." aria-label="Summarize page">
+              <i class="ti ti-file-text chip-icon"></i>
+              <span class="chip-text">Summarize page</span>
+            </button>
+
+            <button class="quick-chip" data-prompt="Fill out the form fields on this page with realistic mock data and submit." aria-label="Fill out form">
+              <i class="ti ti-forms chip-icon"></i>
+              <span class="chip-text">Fill form fields</span>
             </button>
 
             <button class="quick-chip" data-prompt="Analyze this webpage for any exposed PII, credentials, or sensitive data." aria-label="Audit page privacy">
-              <div class="chip-icon-wrap">
-                <i class="ti ti-shield-lock"></i>
-              </div>
-              <div class="chip-content">
-                <span class="chip-title">Audit page privacy</span>
-                <span class="chip-desc">Scan for exposed PII or credential leaks</span>
-              </div>
+              <i class="ti ti-shield-check chip-icon"></i>
+              <span class="chip-text">Audit privacy</span>
             </button>
 
             <button class="quick-chip" data-prompt="Find and click the primary call-to-action button on this page." aria-label="Click primary CTA">
-              <div class="chip-icon-wrap">
-                <i class="ti ti-pointer"></i>
-              </div>
-              <div class="chip-content">
-                <span class="chip-title">Click primary CTA</span>
-                <span class="chip-desc">Locate and trigger the primary action</span>
-              </div>
-            </button>
-
-            <button class="quick-chip" data-prompt="Summarize the structure and main sections of this webpage." aria-label="Summarize page">
-              <div class="chip-icon-wrap">
-                <i class="ti ti-file-description"></i>
-              </div>
-              <div class="chip-content">
-                <span class="chip-title">Summarize page</span>
-                <span class="chip-desc">Extract key sections and structural summary</span>
-              </div>
+              <i class="ti ti-pointer chip-icon"></i>
+              <span class="chip-text">Click primary CTA</span>
             </button>
           </div>
         </div>
@@ -148,7 +102,7 @@
           <textarea
             id="task-input"
             class="composer-textarea"
-            placeholder="Ask DrishtiAI to do something on this page... (Enter to send, Shift+Enter for newline)"
+            placeholder="Ask Drishti anything on this page... (Enter to send)"
             rows="1"
             aria-label="Objective Input"
           ></textarea>
@@ -156,36 +110,36 @@
 
         <div class="composer-toolbar">
           <div class="toolbar-left">
-            <button id="composer-inspect-btn" class="composer-lens-btn" title="Click-to-Inspect Web Lens (Select element on webpage)" type="button">
+            <button id="composer-inspect-btn" class="composer-lens-btn" title="Inspect element on webpage" type="button" aria-label="Inspect element">
               <i class="ti ti-scan"></i>
-              <span>Lens</span>
+              <span>Inspect</span>
             </button>
-            <label class="auto-loop-toggle" title="Automatically evaluate next browser steps iteratively (up to 10 loops)">
+            <label class="auto-loop-toggle" title="Auto-Loop: automatically execute next steps">
               <input type="checkbox" id="auto-loop-cb" checked>
               <span class="loop-toggle-slider" aria-hidden="true"></span>
               <span class="loop-label">Auto-Loop</span>
             </label>
-            <span class="context-elements-hint" id="context-elements-hint">
+            <!-- Compatibility elements -->
+            <span class="context-elements-hint" id="context-elements-hint" style="display: none;">
               <span class="hint-dot"></span>
               <span class="hint-text">Page Ready</span>
             </span>
           </div>
 
           <div class="toolbar-right">
-            <div class="mode-indicator" title="Autonomous Agent Mode Active">
+            <!-- Compatibility element -->
+            <div class="mode-indicator" id="mode-indicator" style="display: none;">
               <i class="ti ti-bolt"></i>
               <span>Agent</span>
             </div>
 
             <!-- Dynamic Action Control Button (Run / Stop) -->
             <button id="stop-agent-btn" class="btn-action-control btn-stop" disabled style="display: none;" title="Stop agent execution" aria-label="Stop running agent">
-              <i class="ti ti-player-stop-filled"></i>
-              <span>Stop</span>
+              <i class="ti ti-player-stop"></i>
             </button>
 
-            <button id="run-agent-btn" class="btn-action-control btn-run" title="Execute objective on current page" aria-label="Run Agent">
+            <button id="run-agent-btn" class="btn-action-control btn-run" title="Send instruction (Enter)" aria-label="Run Agent">
               <i class="ti ti-arrow-up"></i>
-              <span>Run</span>
             </button>
           </div>
         </div>
