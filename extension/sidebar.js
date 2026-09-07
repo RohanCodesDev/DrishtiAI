@@ -1534,12 +1534,27 @@ ${piiRows}
       payload.actionHistory = actionHistory;
 
       const tLlmStart = performance.now();
-      const response = await fetch('http://localhost:3000/api/analyze', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(payload),
-        signal: agentAbortController ? agentAbortController.signal : undefined
-      });
+      const PRIMARY_URL = 'http://localhost:3000/api/analyze';
+      const FALLBACK_URL = 'https://drishtiai-1-mxt0.onrender.com/api/analyze';
+
+      let response;
+      try {
+        response = await fetch(PRIMARY_URL, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(payload),
+          signal: agentAbortController ? agentAbortController.signal : undefined
+        });
+      } catch (err) {
+        if (err.name === 'AbortError') throw err;
+        console.warn('DrishtiAI: Localhost backend inactive/unreachable. Falling back to Render production server:', FALLBACK_URL);
+        response = await fetch(FALLBACK_URL, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(payload),
+          signal: agentAbortController ? agentAbortController.signal : undefined
+        });
+      }
 
       if (!UI_STATE.isAgentRunning) return;
 
