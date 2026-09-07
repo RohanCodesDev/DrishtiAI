@@ -2,12 +2,15 @@
 
 *This document is a living file. It tracks the current capabilities of our project, explains the purpose of each file, and outlines our immediate next steps.*
 
-## Current Status: 🟢 Production-Ready Autonomous Agent with LangGraph Orchestration, Local Vision OCR, Action Safety, & Modern SPA Support
+## Current Status: 🟢 Production-Ready Autonomous Agent with LangGraph Orchestration, Local Vision OCR, Action Safety, API Failover & Smart Auto-Scan
 
 ### What We Can Do Now (Current Capabilities)
 * **Manifest V3 Chrome Extension**: Tab-bound persistent side panel with real-time UI, Tabler Icons, DevTools debugging, and active-tab tracking.
 * **11 Built-In Local PII & Biometric Detectors**: Detect and redact Emails, Phone Numbers (US & International & Indian Mobile), Credit/Debit Cards (with Luhn check), Social Security Numbers (SSN), Indian Aadhaar Numbers, Indian PAN Cards, API Keys & JWT Secrets, IP Addresses (IPv4/IPv6), Crypto Wallets (ETH/BTC), Passport Numbers, and **Human Faces & Biometric Data** on-device before any transmission.
 * **On-Device Human Face Detection & Visual Blackout Redaction**: Offscreen vision engine uses Chrome's native hardware-accelerated `FaceDetector` Web API combined with pixel chromaticity contour heuristics to detect facial regions on viewport screenshots and canvas graphics, overlaying solid privacy blackout shields (`👤 [FACE REDACTED]`) locally so zero facial imagery is ever transmitted to cloud AI.
+* **Dual-Key API Failover Engine**: Instant rate-limit protection utilizing primary (`GROQ_API_KEY`) and secondary (`GROQ_API_KEY_FALLBACK`) API keys with `maxRetries: 0` on LangChain `ChatGroq` instances, eliminating 30-second backoff delays and preventing 8000 TPM limit hangs.
+* **Sequential Execution & Intelligent Tab Awareness**: Strict single-step execution after interactive actions (`CLICK`, `KEYPRESS`) with 800ms DOM re-render pauses, preventing hallucinated action chains and reusing existing open tabs/search results.
+* **Smart Auto-Scan & Multi-Viewport OCR Stitching (Phase 10 Extension)**: Added `SCAN` action enabling the agent to scroll down long pages, capture multi-viewport screenshots (up to 4 viewports), run WASM Tesseract OCR across all viewports, and stitch together a comprehensive visual context map of below-the-fold content, canvas graphics, and dynamic charts.
 * **Custom Blacklist & Whitelist**: Real-time keyword/regex blacklists (always masked as `[BLACKLIST_REDACTED]`) and whitelist tokens (preserved from redaction).
 * **Real-Time Reactive Settings Pane**: Dedicated slide-over settings drawer in the sidebar allowing instant rule toggling, blacklist/whitelist additions/removals, preset controls, and instantaneous JSON DOM updates without page reloads.
 * **Stateful LangGraph Agent Orchestration**: Stateful LangGraph (`OBSERVE` -> `REASON` -> `VALIDATE`) reasoning and execution graph in Node.js backend.
@@ -48,25 +51,25 @@
 * `extension/manifest.json` 
   * The Manifest V3 configuration file. Declares extension metadata, `side_panel`, `background.service_worker`, permissions (`sidePanel`, `tabs`, `activeTab`, `scripting`, `storage`, `offscreen`), and web accessible WASM resources.
 * `extension/background.js` 
-  * Background Service Worker managing tab awareness, offscreen OCR, autonomous navigation in new tabs, and message routing.
+  * Background Service Worker managing tab awareness, offscreen OCR, multi-viewport screenshot capturing (`captureAndStitchOCR`), autonomous navigation in new tabs, and message routing.
 * `extension/offscreen.html` & `extension/offscreen.js`
   * The Offscreen Vision Engine. Houses the Tesseract.js WebAssembly OCR worker, Hardware FaceDetector shield, and local Privacy Firewall redaction pipeline.
 * `extension/content.js` 
-  * Content script housing the local Privacy Firewall, structured DOM extractor, SPA native input setters, pointer click simulation, high-risk action detection, and interactive Web Lens reticle/action menu.
+  * Content script housing the local Privacy Firewall, structured DOM extractor, SPA native input setters, pointer click simulation, high-risk action detection, smooth viewport scroll handler (`SCROLL_DOWN_VIEWPORT`), and interactive Web Lens reticle/action menu.
 * `extension/sidebar.html`, `sidebar.css`, `sidebar.js` 
-  * Conversational AI sidebar with Tabler Icons, chat message stream, turn latency telemetry bars, drawer tabs (Firewall Settings, DOM JSON Inspector, and Zero-Leak Privacy Audit Certificate), and autonomous loop controller.
+  * Conversational AI sidebar with Tabler Icons, chat message stream, turn latency telemetry bars, drawer tabs (Firewall Settings, DOM JSON Inspector, and Zero-Leak Privacy Audit Certificate), and autonomous loop controller with sequential execution logic & `SCAN` action handling.
 * `backend/server.js` 
   * Express server handling CORS, payload limits, health checks, and `/api/analyze` routing to the LangGraph runner.
 * `backend/agent/graph.js` 
-  * LangGraph StateGraph builder, `observe`, `reason`, and `validate` nodes, and `runAgentGraph` runner.
+  * LangGraph StateGraph builder, `observe`, `reason`, and `validate` nodes, dual API key Groq failover engine with instant retry logic (`maxRetries: 0`), and `runAgentGraph` runner.
 * `backend/agent/state.js` 
   * LangGraph State Annotation schema defining agent memory and observations.
 * `backend/agent/tools.js` 
-  * LangChain capability tool definitions for DRISHTI's 7 browser actions.
+  * LangChain capability tool definitions for DRISHTI's 8 browser actions (including `SCAN`).
 * `backend/agent/actions.js` 
   * Zod schemas and 2-tier deterministic safety validation engine.
 * `backend/agent/prompts.js` 
-  * Battle-tested system prompts, DOM tree compression (`compressTree`), unstructured text definition rules, and user prompt builders.
+  * Battle-tested system prompts with sequential step guidelines, `SCAN` action instructions, DOM tree compression (`compressTree`), unstructured text definition rules, and user prompt builders.
 * `backend/test-agent.js` 
   * Automated integration test suite (24 tests) covering compression, schemas, validation, LangGraph execution, and Express endpoints.
 
