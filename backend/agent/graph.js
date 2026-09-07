@@ -2,7 +2,7 @@ const { StateGraph } = require('@langchain/langgraph');
 const { ChatGroq } = require('@langchain/groq');
 const { HumanMessage, SystemMessage } = require('@langchain/core/messages');
 const { AgentStateAnnotation } = require('./state');
-const { AGENT_SYSTEM_PROMPT, buildUserPrompt, compressTree, compactInteractiveDom } = require('./prompts');
+const { AGENT_SYSTEM_PROMPT, buildUserPrompt, compressTree, compactInteractiveDom, sliceActionableElements } = require('./prompts');
 const { ActionResponseSchema, validateActions } = require('./actions');
 
 /**
@@ -16,7 +16,7 @@ async function observeNode(state) {
   console.log(`[DRISHTI] Graph started - Step: ${loopCount}`);
   console.log(`[DRISHTI] OBSERVE - Page: "${state.title || 'Untitled'}" (${state.elementCount || 0} elements)`);
   console.log(`[DRISHTI] URL: ${state.url || 'N/A'}`);
-  
+
   if (state.visualContext) {
     console.log(`[DRISHTI] Visual OCR: "${state.visualContext.replace(/\n+/g, ' ').slice(0, 100)}..."`);
   }
@@ -101,7 +101,7 @@ function extractAndParseJson(content, objective = '') {
  * the next logical action(s) for the browser workflow.
  */
 async function reasonNode(state) {
-  const modelName = process.env.GROQ_MODEL || 'openai/gpt-oss-20b';
+  const modelName = process.env.GROQ_MODEL || 'openai/gpt-oss-120b';
   console.log(`[DRISHTI] REASON - Model: ${modelName}`);
   console.log(`[DRISHTI] Objective: "${state.objective || 'None'}"`);
 
@@ -172,33 +172,44 @@ async function reasonNode(state) {
           candidateActions = parsed;
         }
       }
-      
+
       lastErr = null; // Success, break out of loop
-      break; 
+      break;
     } catch (err) {
       console.warn(`[DRISHTI] Direct reasoning completion encountered error on key attempt ${attempt + 1}:`, err.message);
       lastErr = err;
-      
+
       const isRateLimit = err.message && (
-        err.message.includes('413') || 
-        err.message.includes('Request too large') || 
-        err.message.includes('rate_limit_exceeded') || 
+        err.message.includes('413') ||
+        err.message.includes('Request too large') ||
+        err.message.includes('rate_limit_exceeded') ||
         err.message.includes('TPM')
       );
 
       if (!isRateLimit) {
         break; // If it's not a rate limit issue, don't just keep trying keys
       }
-      
+
+      // If Groq specified a short retry wait (e.g. "Please try again in 3.5s"), pause briefly before next attempt
+      const waitMatch = err.message && err.message.match(/try again in ([\d\.]+)s/i);
+      if (waitMatch) {
+        const waitSec = parseFloat(waitMatch[1]);
+        if (!isNaN(waitSec) && waitSec > 0 && waitSec <= 5) {
+          const waitMs = Math.ceil(waitSec * 1000);
+          console.warn(`[DRISHTI] Groq cool-down: waiting ${waitMs}ms before retrying...`);
+          await new Promise(r => setTimeout(r, waitMs));
+        }
+      }
+
       console.warn(`[DRISHTI] Retrying with next API key (if available)...`);
     }
   }
 
   if (lastErr) {
     const isPayloadOrRateLimit = lastErr.message && (
-      lastErr.message.includes('413') || 
-      lastErr.message.includes('Request too large') || 
-      lastErr.message.includes('rate_limit_exceeded') || 
+      lastErr.message.includes('413') ||
+      lastErr.message.includes('Request too large') ||
+      lastErr.message.includes('rate_limit_exceeded') ||
       lastErr.message.includes('TPM')
     );
 
@@ -206,6 +217,7 @@ async function reasonNode(state) {
     if (isPayloadOrRateLimit) {
       console.warn('[DRISHTI] Payload exceeded model TPM limit on all keys. Applying emergency DOM compaction and retrying...');
       try {
+        await new Promise(r => setTimeout(r, 2000));
         const lastKeyLlm = new ChatGroq({
           apiKey: apiKeys[apiKeys.length - 1],
           model: modelName,
@@ -217,9 +229,9 @@ async function reasonNode(state) {
           url: state.url,
           title: state.title,
           element_count: state.elementCount,
-          root: compactInteractiveDom(state.rawDom?.root || state.compressedDom)
+          actionable_elements: sliceActionableElements(state.rawDom?.root || state.compressedDom, 30, state.objective)
         };
-        ultraCompact.visual_context = (state.visualContext || '').slice(0, 400);
+        ultraCompact.visual_context = (state.visualContext || '').slice(0, 300);
         userPromptText = buildUserPrompt(ultraCompact, state.objective, state.actionHistory);
 
         const fallbackCompletion = await lastKeyLlm.invoke([
@@ -335,7 +347,7 @@ const agentGraph = workflow.compile();
  */
 async function runAgentGraph(payload) {
   const loopCount = payload.loopCount || (payload.actionHistory ? payload.actionHistory.length + 1 : 1);
-  
+
   const initialState = {
     objective: payload.userTask || 'Analyze page state and determine the next action.',
     url: payload.url || '',

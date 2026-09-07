@@ -100,6 +100,32 @@ function compressTree(node) {
 }
 
 /**
+ * Cleans Google redirect and tracking URLs to dramatically reduce token footprint.
+ */
+function cleanHref(urlStr) {
+  if (!urlStr || typeof urlStr !== 'string') return urlStr;
+  try {
+    if (urlStr.includes('/url?') || urlStr.includes('google.com/url?')) {
+      const parsed = new URL(urlStr, 'https://www.google.com');
+      const target = parsed.searchParams.get('url') || parsed.searchParams.get('q');
+      if (target && /^https?:\/\//i.test(target)) {
+        return target;
+      }
+    }
+  } catch (e) {}
+  if (urlStr.length > 120) {
+    try {
+      const parsed = new URL(urlStr, 'https://localhost');
+      const trackingParams = ['utm_source', 'utm_medium', 'utm_campaign', 'ved', 'usg', 'sa', 'opi', 'ei', 'sxsrf', 'client'];
+      trackingParams.forEach(k => parsed.searchParams.delete(k));
+      const res = parsed.toString();
+      return res.length > 150 ? res.slice(0, 150) + '...' : res;
+    } catch (e) {}
+  }
+  return urlStr.length > 150 ? urlStr.slice(0, 150) + '...' : urlStr;
+}
+
+/**
  * Compacts a large DOM tree to keep only interactive elements, inputs, forms,
  * buttons, labels, and semantic headings when element count is high.
  */
@@ -130,7 +156,7 @@ function compactInteractiveDom(node, depth = 0) {
 
   const clone = { id: node.id, tag: node.tag };
   if (node.role) clone.role = node.role;
-  if (hasText) clone.text = node.text.length > 100 ? node.text.slice(0, 100) + '...' : node.text;
+  if (hasText) clone.text = node.text.length > 80 ? node.text.slice(0, 80) + '...' : node.text;
   if (node.interactive || isInteractive) clone.interactive = true;
   if (node.has_pii) clone.has_pii = true;
   if (node.attributes && Object.keys(node.attributes).length > 0) {
@@ -138,7 +164,13 @@ function compactInteractiveDom(node, depth = 0) {
     const cleanAttrs = {};
     const keepKeys = ['type', 'placeholder', 'name', 'value', 'checked', 'required', 'disabled', 'href', 'role', 'aria-label'];
     for (const key of keepKeys) {
-      if (node.attributes[key] !== undefined) cleanAttrs[key] = node.attributes[key];
+      if (node.attributes[key] !== undefined) {
+        if (key === 'href') {
+          cleanAttrs[key] = cleanHref(node.attributes[key]);
+        } else {
+          cleanAttrs[key] = node.attributes[key];
+        }
+      }
     }
     if (Object.keys(cleanAttrs).length > 0) clone.attributes = cleanAttrs;
   }
@@ -147,6 +179,103 @@ function compactInteractiveDom(node, depth = 0) {
   }
 
   return clone;
+}
+
+/**
+ * Cuts/slices a large DOM tree into a prioritized list of the top actionable interactive candidates.
+ * Scores candidates by task intent, form inputs, and content links to keep tokens under 1,500.
+ */
+function sliceActionableElements(root, maxElements = 35, objective = '') {
+  if (!root) return [];
+
+  const candidates = [];
+  const objectiveWords = (objective || '')
+    .toLowerCase()
+    .replace(/[^\w\s]/g, ' ')
+    .split(/\s+/)
+    .filter(w => w.length > 2 && !['and', 'the', 'for', 'about', 'open', 'page', 'search', 'with', 'from', 'this'].includes(w));
+
+  function walk(node) {
+    if (!node) return;
+
+    const tag = (node.tag || '').toLowerCase();
+    const role = (node.role || '').toLowerCase();
+    const isFormInput = ['input', 'textarea', 'select', 'button'].includes(tag);
+    const isInteractive = node.interactive || isFormInput || tag === 'a' || ['button', 'link', 'textbox', 'checkbox', 'radio', 'combobox', 'option', 'tab', 'menuitem'].includes(role);
+    const isHeading = ['h1', 'h2', 'h3'].includes(tag);
+    const text = typeof node.text === 'string' ? node.text.trim() : '';
+    const href = node.attributes?.href;
+
+    if (isInteractive || isHeading || node.has_pii) {
+      let score = 0;
+      const lowerText = text.toLowerCase();
+      const lowerHref = (href || '').toLowerCase();
+
+      // Priority 1: Keyword matches with user's objective (e.g. "alien", "movie", "wikipedia")
+      for (const word of objectiveWords) {
+        if (lowerText.includes(word)) score += 10;
+        if (lowerHref.includes(word)) score += 8;
+      }
+
+      // Priority 2: Core form inputs and action buttons
+      if (isFormInput || role === 'textbox' || role === 'button') {
+        score += 6;
+      }
+
+      // Priority 3: Meaningful links (penalize standard engine utility navs)
+      if (tag === 'a' || role === 'link') {
+        score += 3;
+        if (lowerText.includes('sign in') || lowerText.includes('privacy') || lowerText.includes('terms') || lowerText.includes('help') || lowerText.includes('settings')) {
+          score -= 6;
+        }
+      }
+
+      if (isHeading) {
+        score += 2;
+      }
+
+      const item = {
+        id: node.id,
+        tag: tag,
+        score: score
+      };
+
+      if (role) item.role = role;
+      if (text) item.text = text.length > 80 ? text.slice(0, 80) + '...' : text;
+
+      if (node.attributes) {
+        const attrs = {};
+        if (node.attributes.type) attrs.type = node.attributes.type;
+        if (node.attributes.placeholder) attrs.placeholder = node.attributes.placeholder;
+        if (node.attributes.name) attrs.name = node.attributes.name;
+        if (node.attributes.value) attrs.value = node.attributes.value;
+        if (node.attributes['aria-label']) attrs['aria-label'] = node.attributes['aria-label'];
+        if (href) attrs.href = cleanHref(href);
+        if (Object.keys(attrs).length > 0) item.attributes = attrs;
+      }
+
+      if (node.has_pii) item.has_pii = true;
+
+      candidates.push(item);
+    }
+
+    if (node.children && Array.isArray(node.children)) {
+      for (const child of node.children) {
+        walk(child);
+      }
+    }
+  }
+
+  walk(root);
+
+  // Sort descending by relevance score, preserving DOM order for equal scores
+  candidates.sort((a, b) => b.score - a.score);
+
+  // Take top maxElements and omit internal score field
+  return candidates.slice(0, maxElements).map(item => {
+    const { score, ...rest } = item;
+    return rest;
+  });
 }
 
 /**
@@ -181,24 +310,38 @@ function buildUserPrompt(domData, userTask = "No specific task provided. Just an
   const rawRoot = domData.root || null;
   const elementCount = domData.element_count || 0;
 
-  // If page is large (> 60 elements), apply compact interactive pruning to guarantee low token usage
-  let processedRoot = compressTree(rawRoot);
-  let stringifiedDom = JSON.stringify({
-    url: domData.url,
-    title: domData.title,
-    element_count: elementCount,
-    root: processedRoot
-  });
+  let stringifiedDom = '';
 
-  // If serialized DOM exceeds ~10KB (~2,500 tokens), compact aggressively
-  if (stringifiedDom.length > 10000 || elementCount > 80) {
-    processedRoot = compactInteractiveDom(rawRoot) || processedRoot;
+  // If payload already has pre-sliced actionable elements (e.g. from emergency compaction)
+  if (domData.actionable_elements && Array.isArray(domData.actionable_elements)) {
+    stringifiedDom = JSON.stringify({
+      url: domData.url,
+      title: domData.title,
+      element_count: elementCount,
+      displayed_candidates: domData.actionable_elements.length,
+      actionable_elements: domData.actionable_elements
+    }, null, 2);
+  } else {
+    // Standard DOM formatting
+    let processedRoot = compressTree(rawRoot);
     stringifiedDom = JSON.stringify({
       url: domData.url,
       title: domData.title,
       element_count: elementCount,
       root: processedRoot
     });
+
+    // If page is large (> 60 elements or serialized > 6KB), cut into actionable interactive candidates
+    if (elementCount > 60 || stringifiedDom.length > 6000) {
+      const actionableList = sliceActionableElements(rawRoot, 35, userTask);
+      stringifiedDom = JSON.stringify({
+        url: domData.url,
+        title: domData.title,
+        element_count: elementCount,
+        displayed_candidates: actionableList.length,
+        actionable_elements: actionableList
+      }, null, 2);
+    }
   }
 
   prompt += `Analyze the following webpage structure and determine the next action to achieve the objective.\n\nDOM DATA:\n${stringifiedDom}`;
@@ -222,5 +365,7 @@ module.exports = {
   AGENT_SYSTEM_PROMPT,
   compressTree,
   compactInteractiveDom,
+  sliceActionableElements,
+  cleanHref,
   buildUserPrompt
 };

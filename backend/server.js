@@ -18,7 +18,7 @@ app.get('/api/health', (req, res) => {
   res.json({
     status: 'ok',
     message: 'DrishtiAI Backend running with LangGraph.js + LangChain.js',
-    model: process.env.GROQ_MODEL || 'openai/gpt-oss-20b',
+    model: process.env.GROQ_MODEL || 'openai/gpt-oss-120b',
     framework: 'LangGraph.js'
   });
 });
@@ -39,7 +39,7 @@ app.post('/api/analyze', async (req, res) => {
     console.log(`  📑 Title: ${sanitizedData.title}`);
     console.log(`  🧩 Elements: ${sanitizedData.element_count}`);
     console.log(`  🛡️ Firewall Active Rules: ${sanitizedData.firewall_active_rules}`);
-    
+
     if (sanitizedData.visual_context) {
       const summary = sanitizedData.visual_context.replace(/\n+/g, ' ').trim();
       console.log(`  👁️ Visual OCR Text: "${summary.length > 200 ? summary.slice(0, 200) + '...' : summary}"`);
@@ -109,7 +109,7 @@ app.post('/api/analyze', async (req, res) => {
 if (require.main === module) {
   app.listen(PORT, () => {
     console.log(`🛡️ DrishtiAI LangGraph Backend running on http://localhost:${PORT}`);
-    console.log(`Model: ${process.env.GROQ_MODEL || 'openai/gpt-oss-20b'}`);
+    console.log(`Model: ${process.env.GROQ_MODEL || 'openai/gpt-oss-120b'}`);
     console.log(`Ready to receive sanitized page context on POST /api/analyze`);
   });
 }
