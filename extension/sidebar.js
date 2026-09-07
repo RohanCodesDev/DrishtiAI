@@ -681,7 +681,7 @@ ${piiRows}
     applyDOMSearchOrRaw();
   }
 
-  async function loadBoundTabDOM(skipOcr = false) {
+  async function loadBoundTabDOM(skipOcr = false, doFullScan = false) {
     if (jsonOutput && !skipOcr) jsonOutput.textContent = 'Extracting structured DOM for active tab...';
     if (elementCountBadge && !skipOcr) {
       elementCountBadge.querySelector('.badge-text').textContent = 'Extracting...';
@@ -726,7 +726,8 @@ ${piiRows}
           type: 'GET_DOM',
           tabId: tabId,
           config: UI_STATE.firewallConfig,
-          skip_ocr: skipOcr
+          skip_ocr: skipOcr,
+          full_scan: doFullScan
         }, (res) => {
           if (chrome.runtime.lastError) {
             console.error("Native Messaging Error:", chrome.runtime.lastError);
@@ -1523,6 +1524,11 @@ ${piiRows}
     renderAllChatHistory();
 
     try {
+      const activeTabId = await getTargetTabId();
+      if (activeTabId) {
+        UI_STATE.boundTabId = activeTabId;
+      }
+
       const payload = JSON.parse(UI_STATE.currentJsonText);
       payload.userTask = UI_STATE.currentTurn.userPrompt;
       payload.actionHistory = actionHistory;
@@ -1556,6 +1562,15 @@ ${piiRows}
           UI_STATE.currentTurn.reasoningSummary = result.ai_response.reason;
         }
 
+        if (rawActions.length === 0 || result.ai_response.is_done) {
+          isDone = true;
+          if (!UI_STATE.currentTurn.finalAnswer) {
+            UI_STATE.currentTurn.finalAnswer = result.ai_response.reason || 'Objective successfully completed.';
+          }
+          UI_STATE.currentTurn.status = 'completed';
+          UI_STATE.currentTurn.statusMessage = 'Done';
+        }
+
         // Sequential execution of planned actions
         for (let i = 0; i < rawActions.length; i++) {
           if (!UI_STATE.isAgentRunning) {
@@ -1575,7 +1590,7 @@ ${piiRows}
             break;
           } else if (ai.action === 'DONE') {
             if (!UI_STATE.currentTurn.finalAnswer) {
-              UI_STATE.currentTurn.finalAnswer = ai.value || 'Objective successfully completed.';
+              UI_STATE.currentTurn.finalAnswer = ai.reason || ai.value || 'Objective successfully completed.';
             }
             UI_STATE.currentTurn.status = 'completed';
             UI_STATE.currentTurn.statusMessage = 'Done';
@@ -1595,17 +1610,28 @@ ${piiRows}
           renderAllChatHistory();
 
           if (ai.action === 'WAIT') {
-            await cancellableDelay(2000);
+            await cancellableDelay(1500);
             UI_STATE.currentTurn.steps[stepIndex].status = 'completed';
-            actionHistory.push({ action: ai.action, target: 'N/A', value: '2000ms', execution_result: 'SUCCESS' });
+            actionHistory.push({ action: ai.action, target: 'N/A', value: '1500ms', execution_result: 'SUCCESS' });
           } else {
-            const feedback = await new Promise((resolve) => {
-              chrome.runtime.sendMessage({
-                type: 'EXECUTE_ACTION',
-                tabId: UI_STATE.boundTabId,
-                action: ai
-              }, (res) => resolve(res));
-            });
+            const feedback = await Promise.race([
+              new Promise((resolve) => {
+                chrome.runtime.sendMessage({
+                  type: 'EXECUTE_ACTION',
+                  tabId: UI_STATE.boundTabId,
+                  action: ai
+                }, (res) => {
+                  if (chrome.runtime.lastError) {
+                    resolve({ success: false, error: chrome.runtime.lastError.message });
+                  } else {
+                    resolve(res || { success: false, error: 'NO_RESPONSE' });
+                  }
+                });
+              }),
+              new Promise((resolve) => {
+                setTimeout(() => resolve({ success: false, error: 'ACTION_EXECUTION_TIMEOUT' }), 10000);
+              })
+            ]);
 
             // Human-in-the-Loop (HITL) Safety Pause: Intercept high-risk action requiring approval
             if (feedback && feedback.requires_approval) {
@@ -1647,12 +1673,22 @@ ${piiRows}
               await cancellableDelay(400);
               await loadBoundTabDOM();
               break; // Stop executing remaining actions from the old page batch
+            } else if ((ai.action === 'CLICK' || (ai.action === 'KEYPRESS' && (ai.value === 'Enter' || !ai.value))) && success) {
+              UI_STATE.currentTurn.statusMessage = `Action executed. Waiting for potential page updates…`;
+              await cancellableDelay(800); // Give DOM time to mutate or navigate
+              await loadBoundTabDOM();
+              break; // Stop executing remaining actions in case this triggered a page load
+            } else if (ai.action === 'SCAN' && success) {
+              UI_STATE.currentTurn.statusMessage = 'Scanning entire page and stitching visual context...';
+              await cancellableDelay(1000); // Give the UI a moment
+              await loadBoundTabDOM(false, true); // true = doFullScan
+              break;
             } else if (ai.action === 'SCROLL' && success) {
               await cancellableDelay(150);
               await loadBoundTabDOM(true);
             }
 
-            await cancellableDelay(100);
+            await cancellableDelay(150);
           }
 
           renderAllChatHistory();
@@ -1672,6 +1708,10 @@ ${piiRows}
 
       if (isDone) {
         UI_STATE.currentTurn.status = 'completed';
+        if (!UI_STATE.currentTurn.finalAnswer) {
+          UI_STATE.currentTurn.finalAnswer = 'Completed all planned actions on the page.';
+        }
+        UI_STATE.currentTurn.statusMessage = 'Done';
         updateAgentStatus('READY', 'Ready');
         setAgentRunningState(false);
         renderAllChatHistory();
@@ -1688,6 +1728,10 @@ ${piiRows}
         }, 800);
       } else {
         UI_STATE.currentTurn.status = 'completed';
+        if (!UI_STATE.currentTurn.finalAnswer) {
+          UI_STATE.currentTurn.finalAnswer = 'Completed all planned actions on the page.';
+        }
+        UI_STATE.currentTurn.statusMessage = 'Done';
         updateAgentStatus('READY', 'Ready');
         setAgentRunningState(false);
         renderAllChatHistory();
@@ -1756,6 +1800,16 @@ ${piiRows}
       turn.statusMessage = `Navigated to ${feedback?.navigatedTo || pending.action.value}. Inspecting fresh page…`;
       await cancellableDelay(400);
       await loadBoundTabDOM();
+      pending.remainingActions = [];
+    } else if ((pending.action.action === 'CLICK' || (pending.action.action === 'KEYPRESS' && (pending.action.value === 'Enter' || !pending.action.value))) && success) {
+      turn.statusMessage = `Action executed. Waiting for potential page updates…`;
+      await cancellableDelay(800);
+      await loadBoundTabDOM();
+      pending.remainingActions = [];
+    } else if (pending.action.action === 'SCAN' && success) {
+      turn.statusMessage = 'Scanning entire page and stitching visual context...';
+      await cancellableDelay(1000);
+      await loadBoundTabDOM(false, true); // true = doFullScan
       pending.remainingActions = [];
     } else if (pending.action.action === 'SCROLL' && success) {
       await cancellableDelay(150);

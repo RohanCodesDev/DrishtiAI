@@ -204,6 +204,63 @@ async function pingOffscreenDocument(maxRetries = 5, retryDelayMs = 150) {
   return false;
 }
 
+// Helper: Deep scroll, capture multiple viewports, and stitch OCR contexts
+async function captureAndStitchOCR(targetTabId, config = null, canvases = []) {
+  try {
+    let targetWindowId = null;
+    if (targetTabId) {
+      const tab = await chrome.tabs.get(targetTabId).catch(() => null);
+      if (tab && tab.windowId !== undefined) {
+        targetWindowId = tab.windowId;
+      }
+    }
+
+    let stitchedText = '';
+    let isAtBottom = false;
+    let loops = 0;
+    const MAX_LOOPS = 4; // Prevent infinite loops or memory overload
+    
+    // First, ensure we start from the top
+    await chrome.scripting.executeScript({
+      target: { tabId: targetTabId },
+      func: () => window.scrollTo(0, 0)
+    }).catch(() => {});
+    
+    // Allow a tiny delay for scroll reset to render
+    await new Promise(resolve => setTimeout(resolve, 200));
+
+    while (!isAtBottom && loops < MAX_LOOPS) {
+      loops++;
+      const text = await captureAndRunOCR(targetTabId, config, canvases);
+      if (text && !text.includes('(OCR processing failed')) {
+        stitchedText += `\n[Viewport ${loops}]\n` + text;
+      }
+
+      // Scroll down
+      isAtBottom = await new Promise(resolve => {
+        chrome.tabs.sendMessage(targetTabId, { type: 'EXECUTE_ACTION', action: { action: 'SCROLL_DOWN_VIEWPORT' } }, (res) => {
+          if (chrome.runtime.lastError || !res) resolve(true); // Fallback to stop if error
+          else resolve(res.isAtBottom);
+        });
+      });
+      // Wait for lazy render
+      await new Promise(resolve => setTimeout(resolve, 300));
+    }
+
+    // Restore scroll position to top
+    await chrome.scripting.executeScript({
+      target: { tabId: targetTabId },
+      func: () => window.scrollTo(0, 0)
+    }).catch(() => {});
+
+    console.log(`[DrishtiAI Background] 🧵 Stitched ${loops} viewports. Total OCR text length: ${stitchedText.length}`);
+    return stitchedText || '(No text detected during full scan)';
+  } catch (err) {
+    console.error('Full scan OCR stitching failed:', err);
+    return '(Full scan OCR stitching failed)';
+  }
+}
+
 // Helper: Synchronize screenshot capture and offscreen OCR worker processing
 async function captureAndRunOCR(targetTabId, config = null, canvases = []) {
   try {
@@ -306,7 +363,10 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
         const domData = await getTabDOM(message.tabId, message.config);
         
         if (!domData.is_restricted) {
-          if (message.skip_ocr) {
+          if (message.full_scan) {
+            console.log('[DrishtiAI Background] 🔍 Full Scan requested. Performing deep scroll and multi-viewport OCR stitch...');
+            domData.visual_context = await captureAndStitchOCR(message.tabId, message.config, domData.canvases);
+          } else if (message.skip_ocr) {
             console.log('[DrishtiAI Background] ⚡ Fast path: Bypassing heavy viewport OCR.');
             if (domData.canvases && domData.canvases.length > 0) {
               domData.visual_context = await decodeCanvasesDirect(domData.canvases, message.config);
@@ -486,11 +546,26 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
         }
       }
 
-      chrome.tabs.sendMessage(tabId, message, (res) => {
+      // Forward to content script with automatic injection retry fallback
+      chrome.tabs.sendMessage(tabId, message, async (res) => {
         if (chrome.runtime.lastError) {
-          const errMsg = chrome.runtime.lastError.message || 'Failed to communicate with tab';
-          console.error('EXECUTE_ACTION error:', errMsg);
-          sendResponse({ success: false, error: errMsg });
+          console.warn('EXECUTE_ACTION failed to reach content script, injecting content.js and retrying...');
+          try {
+            await chrome.scripting.executeScript({
+              target: { tabId },
+              files: ['content.js']
+            });
+            await new Promise((r) => setTimeout(r, 100));
+            chrome.tabs.sendMessage(tabId, message, (retryRes) => {
+              if (chrome.runtime.lastError) {
+                sendResponse({ success: false, error: chrome.runtime.lastError.message });
+              } else {
+                sendResponse(retryRes || { success: true });
+              }
+            });
+          } catch (injectErr) {
+            sendResponse({ success: false, error: injectErr.message });
+          }
         } else {
           sendResponse(res || { success: false, error: 'EMPTY_TAB_RESPONSE' });
         }

@@ -763,16 +763,61 @@ if (typeof chrome !== 'undefined' && chrome.runtime && chrome.runtime.onMessage 
       if (ai.target_id) {
         targetElement = document.querySelector(`[data-drishti-id="${ai.target_id}"]`);
         if (!targetElement) {
-          // If data-drishti-id attributes are not yet stamped on this fresh page, index the DOM
-          if (!document.querySelector('[data-drishti-id]')) {
-            try { getStructuredDOM(currentFirewallConfig); } catch (e) {}
+          try {
+            // Re-index the page to stamp fresh data-drishti-id attributes
+            getStructuredDOM(currentFirewallConfig);
             targetElement = document.querySelector(`[data-drishti-id="${ai.target_id}"]`);
-          }
+          } catch (e) {}
         }
         if (!targetElement) {
           try {
-            targetElement = document.getElementById(ai.target_id) || document.querySelector(`[name="${ai.target_id}"], [aria-label="${ai.target_id}"]`);
+            targetElement = document.getElementById(ai.target_id) || 
+                            document.querySelector(`[name="${ai.target_id}"], [aria-label="${ai.target_id}"], [data-id="${ai.target_id}"]`);
           } catch (e) {}
+        }
+      }
+
+      // Smart semantic fallback for TYPE actions if targetElement is still null
+      if (!targetElement && ai.action === 'TYPE') {
+        const inputs = Array.from(document.querySelectorAll('input:not([type="hidden"]), textarea'));
+        if (inputs.length === 1) {
+          targetElement = inputs[0];
+        } else if (ai.reason) {
+          const reason = (ai.reason || '').toLowerCase();
+          for (const inp of inputs) {
+            const label = (inp.getAttribute('aria-label') || inp.placeholder || inp.name || '').toLowerCase();
+            if (label && reason.includes(label)) {
+              targetElement = inp;
+              break;
+            }
+          }
+        }
+      }
+
+      // Support background.js deep-scroll orchestration
+      if (ai.action === 'SCROLL_DOWN_VIEWPORT') {
+        const previousY = window.scrollY;
+        window.scrollBy(0, window.innerHeight);
+        // Let it settle
+        setTimeout(() => {
+          const isAtBottom = window.scrollY === previousY || (window.innerHeight + window.scrollY) >= document.body.offsetHeight;
+          sendResponse({ success: true, isAtBottom });
+        }, 150);
+        return true;
+      }
+
+      // Smart semantic fallback for CLICK actions if targetElement is still null
+      if (!targetElement && ai.action === 'CLICK') {
+        const textTarget = (ai.value || ai.reason || '').toLowerCase();
+        if (textTarget) {
+          const clickables = Array.from(document.querySelectorAll('button, a, [role="button"], [role="radio"], [role="checkbox"], input[type="submit"], input[type="button"]'));
+          for (const btn of clickables) {
+            const btnText = (btn.textContent || btn.value || btn.getAttribute('aria-label') || '').toLowerCase().trim();
+            if (btnText && (textTarget.includes(btnText) || btnText.includes(textTarget))) {
+              targetElement = btn;
+              break;
+            }
+          }
         }
       }
 
@@ -904,22 +949,38 @@ if (typeof chrome !== 'undefined' && chrome.runtime && chrome.runtime.onMessage 
   });
 }
 
-// Modern Framework (React, Vue, Angular) Native Input Setter & Rich Field Formatter
+// Modern Framework (React, Vue, Angular, Material-UI, Google Forms) Native Input Setter & Rich Field Formatter
 function setNativeInputValue(el, value) {
   if (!el) return;
-  const tag = el.tagName ? el.tagName.toUpperCase() : '';
   const val = value !== undefined && value !== null ? String(value) : '';
 
-  if (el.isContentEditable) {
+  // If target element is a container or label wrapping an input, resolve the actual input element
+  const rawTag = el.tagName ? el.tagName.toUpperCase() : '';
+  if (!['INPUT', 'TEXTAREA', 'SELECT'].includes(rawTag) && !el.isContentEditable) {
+    const innerInput = el.querySelector('input:not([type="hidden"]), textarea, select, [contenteditable="true"]');
+    if (innerInput) {
+      el = innerInput;
+    }
+  }
+
+  const tag = el.tagName ? el.tagName.toUpperCase() : '';
+
+  try {
+    el.scrollIntoView({ behavior: 'smooth', block: 'center' });
+  } catch (e) {}
+
+  try {
     el.focus();
+  } catch (e) {}
+
+  if (el.isContentEditable) {
     el.innerText = val;
-    el.dispatchEvent(new Event('input', { bubbles: true }));
-    el.dispatchEvent(new Event('change', { bubbles: true }));
+    el.dispatchEvent(new Event('input', { bubbles: true, composed: true }));
+    el.dispatchEvent(new Event('change', { bubbles: true, composed: true }));
     return;
   }
 
   if (tag === 'SELECT') {
-    el.focus();
     let matched = false;
     if (el.options) {
       for (let i = 0; i < el.options.length; i++) {
@@ -934,25 +995,24 @@ function setNativeInputValue(el, value) {
     if (!matched && el.options && el.options.length > 0) {
       el.value = val;
     }
-    el.dispatchEvent(new Event('change', { bubbles: true }));
-    el.dispatchEvent(new Event('input', { bubbles: true }));
+    el.dispatchEvent(new Event('change', { bubbles: true, composed: true }));
+    el.dispatchEvent(new Event('input', { bubbles: true, composed: true }));
     return;
   }
 
   if (tag === 'INPUT' && (el.type === 'checkbox' || el.type === 'radio')) {
-    el.focus();
     const boolVal = val === 'true' || val === '1' || val.toLowerCase() === 'check' || val.toLowerCase() === 'on';
     if (el.type === 'checkbox') {
       el.checked = boolVal !== undefined ? boolVal : !el.checked;
     } else {
       el.checked = true;
     }
-    el.dispatchEvent(new Event('change', { bubbles: true }));
-    el.dispatchEvent(new Event('input', { bubbles: true }));
+    el.dispatchEvent(new Event('change', { bubbles: true, composed: true }));
+    el.dispatchEvent(new Event('input', { bubbles: true, composed: true }));
     return;
   }
 
-  // Modern Framework (React, Vue, Angular) Prototype Value Setter Fallback
+  // Modern Framework Prototype Value Setter Fallback (React, Vue, Google Forms)
   let proto = null;
   if (tag === 'INPUT' && typeof window !== 'undefined' && window.HTMLInputElement) {
     proto = window.HTMLInputElement.prototype;
@@ -967,34 +1027,53 @@ function setNativeInputValue(el, value) {
     el.value = val;
   }
 
-  el.dispatchEvent(new Event('input', { bubbles: true }));
-  el.dispatchEvent(new Event('change', { bubbles: true }));
+  // Dispatch full event sequence to notify virtual DOM and form frameworks
+  el.dispatchEvent(new Event('focus', { bubbles: true, composed: true }));
+  el.dispatchEvent(new Event('input', { bubbles: true, composed: true }));
+  el.dispatchEvent(new Event('change', { bubbles: true, composed: true }));
+  el.dispatchEvent(new KeyboardEvent('keydown', { bubbles: true, key: 'a' }));
+  el.dispatchEvent(new KeyboardEvent('keyup', { bubbles: true, key: 'a' }));
+  el.dispatchEvent(new Event('blur', { bubbles: true, composed: true }));
 }
 
 // Full Pointer Event Sequence for High-Fidelity SPA Clicks
 function simulateClick(el) {
   if (!el) return;
-  el.focus();
-  const rect = typeof el.getBoundingClientRect === 'function' ? el.getBoundingClientRect() : { left: 0, top: 0, width: 0, height: 0 };
+  try {
+    el.scrollIntoView({ behavior: 'smooth', block: 'center' });
+  } catch (e) {}
+
+  try {
+    el.focus();
+  } catch (e) {}
+
+  // If target is a label or wrapper around a radio/checkbox/button, ensure click reaches the clickable element
+  const innerClickable = el.querySelector('input, button, a, [role="radio"], [role="checkbox"], [role="button"]');
+  const target = innerClickable || el;
+
+  const rect = typeof target.getBoundingClientRect === 'function' ? target.getBoundingClientRect() : { left: 0, top: 0, width: 0, height: 0 };
   const clientX = rect.left + (rect.width ? rect.width / 2 : 0);
   const clientY = rect.top + (rect.height ? rect.height / 2 : 0);
-  const eventOpts = { bubbles: true, cancelable: true, view: typeof window !== 'undefined' ? window : null, clientX, clientY };
+  const eventOpts = { bubbles: true, cancelable: true, composed: true, view: typeof window !== 'undefined' ? window : null, clientX, clientY };
 
   if (typeof PointerEvent !== 'undefined') {
     try {
-      el.dispatchEvent(new PointerEvent('pointerdown', eventOpts));
-      el.dispatchEvent(new MouseEvent('mousedown', eventOpts));
-      el.dispatchEvent(new PointerEvent('pointerup', eventOpts));
-      el.dispatchEvent(new MouseEvent('mouseup', eventOpts));
+      target.dispatchEvent(new PointerEvent('pointerdown', eventOpts));
+      target.dispatchEvent(new MouseEvent('mousedown', eventOpts));
+      target.dispatchEvent(new PointerEvent('pointerup', eventOpts));
+      target.dispatchEvent(new MouseEvent('mouseup', eventOpts));
     } catch (e) {}
   } else if (typeof MouseEvent !== 'undefined') {
     try {
-      el.dispatchEvent(new MouseEvent('mousedown', eventOpts));
-      el.dispatchEvent(new MouseEvent('mouseup', eventOpts));
+      target.dispatchEvent(new MouseEvent('mousedown', eventOpts));
+      target.dispatchEvent(new MouseEvent('mouseup', eventOpts));
     } catch (e) {}
   }
 
-  if (typeof el.click === 'function') {
+  if (typeof target.click === 'function') {
+    target.click();
+  }
+  if (target !== el && typeof el.click === 'function') {
     el.click();
   }
 }
