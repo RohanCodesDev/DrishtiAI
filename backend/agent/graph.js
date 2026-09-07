@@ -35,6 +35,67 @@ async function observeNode(state) {
 }
 
 /**
+ * Resilient JSON Extractor & Parser
+ * Handles reasoning model thought tokens, markdown code fences, and plain-text Q&A responses.
+ */
+function extractAndParseJson(content, objective = '') {
+  if (!content) return null;
+  const str = typeof content === 'string' ? content : JSON.stringify(content);
+  const cleanStr = str.replace(/<think>[\s\S]*?<\/think>/gi, '').trim();
+
+  // Try parsing from markdown code fences first
+  const fenceMatches = Array.from(cleanStr.matchAll(/```(?:json)?\s*([\s\S]*?)\s*```/g));
+  for (const match of fenceMatches) {
+    try {
+      const parsed = JSON.parse(match[1].trim());
+      if (parsed) return parsed;
+    } catch (e) {}
+  }
+
+  // Try direct parse
+  try {
+    const directParsed = JSON.parse(cleanStr);
+    if (directParsed) return directParsed;
+  } catch (e) {}
+
+  // Find balanced braces from the end (since final JSON answer is at the end)
+  const firstBrace = cleanStr.indexOf('{');
+  const lastBrace = cleanStr.lastIndexOf('}');
+  if (firstBrace !== -1 && lastBrace > firstBrace) {
+    const candidate = cleanStr.substring(firstBrace, lastBrace + 1);
+    try {
+      const parsed = JSON.parse(candidate);
+      if (parsed) return parsed;
+    } catch (e) {}
+  }
+
+  // Find balanced brackets for array
+  const firstBracket = cleanStr.indexOf('[');
+  const lastBracket = cleanStr.lastIndexOf(']');
+  if (firstBracket !== -1 && lastBracket > firstBracket) {
+    const candidate = cleanStr.substring(firstBracket, lastBracket + 1);
+    try {
+      const parsed = JSON.parse(candidate);
+      if (parsed) return parsed;
+    } catch (e) {}
+  }
+
+  // If objective is a question or query and no JSON structure was found, return REPLY with clean text
+  if (cleanStr.length > 0) {
+    const isQuestion = objective.includes('?') || /^(what|who|where|when|why|how|which|can|is|are|tell|regarding)\s+/i.test(objective);
+    if (isQuestion) {
+      const plainText = cleanStr.replace(/```[a-z]*|```/g, '').trim();
+      return {
+        actions: [{ action: 'REPLY', value: plainText, reason: 'Answer to user question' }],
+        summary_reason: plainText
+      };
+    }
+  }
+
+  return null;
+}
+
+/**
  * REASON NODE
  * Uses LangChain + ChatGroq with structured output (Zod schema) to decide
  * the next logical action(s) for the browser workflow.
@@ -60,23 +121,19 @@ async function reasonNode(state) {
     };
   }
 
-  if (!process.env.GROQ_API_KEY) {
-    console.error('[DRISHTI] ERROR: GROQ_API_KEY is not configured in backend/.env');
+  const apiKeys = [process.env.GROQ_API_KEY, process.env.GROQ_API_KEY_FALLBACK].filter(Boolean);
+
+  if (apiKeys.length === 0) {
+    console.error('[DRISHTI] ERROR: No GROQ_API_KEY available in environment or fallback.');
     return {
       plannedActions: [{
         action: 'WAIT',
         value: '2000ms',
-        reason: 'GROQ_API_KEY is missing in backend environment.'
+        reason: 'GROQ_API_KEY is missing.'
       }],
       error: 'GROQ_API_KEY_MISSING'
     };
   }
-
-  const llm = new ChatGroq({
-    apiKey: process.env.GROQ_API_KEY,
-    model: modelName,
-    temperature: 0
-  });
 
   let userPromptText = buildUserPrompt(
     state.rawDom || { url: state.url, title: state.title, element_count: state.elementCount, root: state.compressedDom },
@@ -86,54 +143,95 @@ async function reasonNode(state) {
 
   let candidateActions = [];
   let summaryReason = '';
+  let lastErr = null;
 
-  try {
-    // Primary mechanism: LangChain Structured Output backed by Zod
-    const structuredLlm = llm.withStructuredOutput(ActionResponseSchema);
-    const response = await structuredLlm.invoke([
-      new SystemMessage(AGENT_SYSTEM_PROMPT),
-      new HumanMessage(userPromptText)
-    ]);
+  for (let attempt = 0; attempt < apiKeys.length; attempt++) {
+    const currentKey = apiKeys[attempt];
+    const llm = new ChatGroq({
+      apiKey: currentKey,
+      model: modelName,
+      temperature: 0,
+      maxRetries: 0
+    });
 
-    if (response && Array.isArray(response.actions)) {
-      candidateActions = response.actions;
-      summaryReason = response.summary_reason || '';
+    try {
+      const completion = await llm.invoke([
+        new SystemMessage(AGENT_SYSTEM_PROMPT),
+        new HumanMessage(userPromptText)
+      ]);
+
+      const parsed = extractAndParseJson(completion.content, state.objective);
+      if (parsed) {
+        if (Array.isArray(parsed.actions)) {
+          candidateActions = parsed.actions;
+          summaryReason = parsed.summary_reason || '';
+        } else if (parsed.action) {
+          candidateActions = [parsed];
+          summaryReason = parsed.reason || '';
+        } else if (Array.isArray(parsed)) {
+          candidateActions = parsed;
+        }
+      }
+      
+      lastErr = null; // Success, break out of loop
+      break; 
+    } catch (err) {
+      console.warn(`[DRISHTI] Direct reasoning completion encountered error on key attempt ${attempt + 1}:`, err.message);
+      lastErr = err;
+      
+      const isRateLimit = err.message && (
+        err.message.includes('413') || 
+        err.message.includes('Request too large') || 
+        err.message.includes('rate_limit_exceeded') || 
+        err.message.includes('TPM')
+      );
+
+      if (!isRateLimit) {
+        break; // If it's not a rate limit issue, don't just keep trying keys
+      }
+      
+      console.warn(`[DRISHTI] Retrying with next API key (if available)...`);
     }
-  } catch (structuredErr) {
-    console.warn('[DRISHTI] withStructuredOutput error, evaluating fallback:', structuredErr.message);
+  }
 
-    const isPayloadOrRateLimit = structuredErr.message && (
-      structuredErr.message.includes('413') || 
-      structuredErr.message.includes('Request too large') || 
-      structuredErr.message.includes('rate_limit_exceeded') || 
-      structuredErr.message.includes('TPM')
+  if (lastErr) {
+    const isPayloadOrRateLimit = lastErr.message && (
+      lastErr.message.includes('413') || 
+      lastErr.message.includes('Request too large') || 
+      lastErr.message.includes('rate_limit_exceeded') || 
+      lastErr.message.includes('TPM')
     );
 
-    // If payload too large, apply emergency ultra-compaction (form elements only) and retry once
+    // If payload too large and we exhausted keys, apply emergency ultra-compaction (form elements only) and retry once with last key
     if (isPayloadOrRateLimit) {
-      console.warn('[DRISHTI] Payload exceeded model TPM limit. Applying emergency DOM compaction and retrying...');
+      console.warn('[DRISHTI] Payload exceeded model TPM limit on all keys. Applying emergency DOM compaction and retrying...');
       try {
+        const lastKeyLlm = new ChatGroq({
+          apiKey: apiKeys[apiKeys.length - 1],
+          model: modelName,
+          temperature: 0,
+          maxRetries: 0
+        });
+
         const ultraCompact = {
           url: state.url,
           title: state.title,
           element_count: state.elementCount,
           root: compactInteractiveDom(state.rawDom?.root || state.compressedDom)
         };
-        // Omit visual context to strictly save tokens
-        ultraCompact.visual_context = '';
+        ultraCompact.visual_context = (state.visualContext || '').slice(0, 400);
         userPromptText = buildUserPrompt(ultraCompact, state.objective, state.actionHistory);
 
-        const fallbackCompletion = await llm.invoke([
+        const fallbackCompletion = await lastKeyLlm.invoke([
           new SystemMessage(AGENT_SYSTEM_PROMPT),
           new HumanMessage(userPromptText)
         ]);
 
-        const content = typeof fallbackCompletion.content === 'string' ? fallbackCompletion.content : JSON.stringify(fallbackCompletion.content);
-        const jsonMatch = content.match(/\{[\s\S]*\}|\[[\s\S]*\]/);
-        if (jsonMatch) {
-          const parsed = JSON.parse(jsonMatch[0]);
+        const parsed = extractAndParseJson(fallbackCompletion.content, state.objective);
+        if (parsed) {
           if (Array.isArray(parsed.actions)) {
             candidateActions = parsed.actions;
+            summaryReason = parsed.summary_reason || '';
           } else if (parsed.action) {
             candidateActions = [parsed];
           } else if (Array.isArray(parsed)) {
@@ -142,7 +240,6 @@ async function reasonNode(state) {
         }
       } catch (retryErr) {
         console.error('[DRISHTI] Emergency compaction retry failed:', retryErr.message);
-        // Do NOT loop WAIT 2000ms on rate limits; finish cleanly to avoid infinite spinning
         return {
           plannedActions: [{
             action: 'DONE',
@@ -155,33 +252,11 @@ async function reasonNode(state) {
         };
       }
     } else {
-      // Fallback: Direct invocation with strict schema prompting and Zod validation
-      try {
-        const completion = await llm.invoke([
-          new SystemMessage(AGENT_SYSTEM_PROMPT),
-          new HumanMessage(userPromptText)
-        ]);
-
-        const content = typeof completion.content === 'string' ? completion.content : JSON.stringify(completion.content);
-        const jsonMatch = content.match(/\{[\s\S]*\}|\[[\s\S]*\]/);
-        if (jsonMatch) {
-          const parsed = JSON.parse(jsonMatch[0]);
-          if (Array.isArray(parsed.actions)) {
-            candidateActions = parsed.actions;
-          } else if (parsed.action) {
-            candidateActions = [parsed];
-          } else if (Array.isArray(parsed)) {
-            candidateActions = parsed;
-          }
-        }
-      } catch (fallbackErr) {
-        console.error('[DRISHTI] Direct fallback parsing also failed:', fallbackErr.message);
-        candidateActions = [{
-          action: 'WAIT',
-          value: '2000ms',
-          reason: 'Failed to obtain structured action plan from LLM.'
-        }];
-      }
+      candidateActions = [{
+        action: 'WAIT',
+        value: '1500ms',
+        reason: 'Failed to obtain structured action plan from LLM.'
+      }];
     }
   }
 
