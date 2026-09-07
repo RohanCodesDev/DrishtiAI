@@ -13,7 +13,7 @@ app.use(cors());
 // Increase payload limit because DOM JSON can be quite large
 app.use(express.json({ limit: '50mb' }));
 
-// Health Check Endpoint
+// Health Check Endpoints
 app.get('/api/health', (req, res) => {
   res.json({
     status: 'ok',
@@ -21,6 +21,10 @@ app.get('/api/health', (req, res) => {
     model: process.env.GROQ_MODEL || 'openai/gpt-oss-120b',
     framework: 'LangGraph.js'
   });
+});
+
+app.get('/health', (req, res) => {
+  res.json({ status: 'ok' });
 });
 
 // Main Endpoint: Receive sanitized DOM context from the extension
