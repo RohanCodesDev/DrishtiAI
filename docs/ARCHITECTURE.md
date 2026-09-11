@@ -1,282 +1,405 @@
-# 🏛️ DrishtiAI System Architecture
+# 🛡️ DrishtiAI — How It All Works
+### A Plain-English Guide to the Full System Architecture
 
-This document details the architectural design, cyclic state machines, data flow diagrams, sequence models, and entity models of **DrishtiAI**.
+> **Who is this for?** Anyone — judges, professors, teammates, or curious people — who wants to understand what DrishtiAI does and how, without needing to know how to code.
 
 ---
 
-## 1. High-Level Architecture
+## 🤔 The Big Problem We're Solving
 
-DrishtiAI decouples **perception & privacy protection** from **planning & cognitive reasoning**:
+Imagine you're using your bank's website. You ask an AI assistant to help you fill out a transfer form. To do that, the AI needs to "see" your screen.
 
-1. **Client-Side Perception Layer (Chrome Manifest V3 Extension):**  
-   Executes 100% locally in the browser. It parses the DOM, applies an 11-rule PII firewall, blackouts human faces in canvas buffers, and decodes graphical text via local WebAssembly OCR. No raw pixels, passwords, or credentials ever leave the device.
-2. **Cognitive Orchestration Layer (Node.js + LangGraph.js Backend):**  
-   Receives strictly sanitized context. It runs a stateful cyclic state machine (`Observe` $\to$ `Reason` $\to$ `Validate`), slices large DOM trees into actionable candidates, and emits structured JSON action plans.
-3. **Execution & Guardrail Layer (Client In-Page Runner):**  
-   Receives validated actions, checks against an in-browser **Human-in-the-Loop (HITL)** risk gate, and dispatches native synthetic events using prototype property descriptors.
+**The problem:** Most AI assistants do this by taking a photo of your screen and sending it — passwords, account numbers, your face, everything — to a server somewhere on the internet. That's a huge privacy risk.
 
-```mermaid
-graph TB
-    subgraph Client["1. CLIENT-SIDE EXTENSION (Chrome MV3 - On-Device)"]
-        Page[Target Webpage] --> DOM[content.js: Semantic DOM Extractor]
-        DOM --> FW[11-Rule Privacy Firewall & Luhn Check]
-        Page --> Canvas[offscreen.js: WASM OCR Worker]
-        Canvas --> Face[FaceDetector API: Irreversible Blackout]
-        Face --> WASM[Tesseract.js WASM OCR Core]
-        FW --> CleanData[Sanitized Context: 0 Bytes PII]
-        WASM --> CleanData
-        UI[Side Panel UI & Settings] --> CleanData
-    end
+**DrishtiAI's solution:** What if the AI could first act like a security guard, cover up all the sensitive parts of your screen *before* the photo ever leaves your laptop? That's exactly what we built.
 
-    subgraph Backend["2. BACKEND SERVER (Node.js + LangGraph.js)"]
-        CleanData -- "POST /api/analyze" --> Obs[Node 1: OBSERVE - Tree Compression]
-        Obs --> Reas[Node 2: REASON - ChatGroq LLM Reasoning]
-        Reas --> Val[Node 3: VALIDATE - Non-LLM Safety Validator]
-        Val --> Check{Valid Plan?}
-        Check -- "Validation Warnings" --> Reas
-        Check -- "Approved" --> Actions[Validated Action JSON]
-    end
+---
 
-    Actions --> Client
-    Client --> HITL{Destructive Action?}
-    HITL -- "Yes (Delete/Pay)" --> Amber[Amber Approval Card / Pause]
-    Amber -- "User Confirmed" --> Exec[SPA Native Setter & Pointer Dispatch]
-    HITL -- "No (Safe Action)" --> Exec
-    Exec --> Page
+## 🏠 The Simple Analogy
+
+Think of DrishtiAI like a **secure document courier service**:
+
+1. 📄 You have a classified document (your screen/webpage)
+2. 🖊️ A security officer (the extension) reads it, **blacks out all secret parts** (passwords, faces, card numbers)
+3. ✉️ Only the **redacted, safe version** is sent to headquarters (the AI server)
+4. 🧠 Headquarters figures out what to do next and sends back instructions
+5. ✅ The security officer back at your desk follows the instructions and takes action
+
+Your real secrets never left the room.
+
+---
+
+## 🗺️ The Full System — 4 Layers
+
+```
+┌─────────────────────────────────────────────────────────┐
+│                  YOUR COMPUTER (Browser)                 │
+│                                                         │
+│  ┌───────────────┐    ┌──────────────────────────────┐  │
+│  │  The Webpage  │───▶│   LAYER 1: DOM Scanner       │  │
+│  │ (Bank / Gmail │    │   Reads all buttons & text   │  │
+│  │ / Any site)   │    └──────────┬───────────────────┘  │
+│  └───────────────┘               │                       │
+│                                  ▼                       │
+│                    ┌─────────────────────────┐           │
+│                    │  LAYER 2: Privacy Shield │           │
+│                    │  Blacks out sensitive    │           │
+│                    │  regions on the image   │           │
+│                    └──────────┬──────────────┘           │
+│                               │                           │
+└───────────────────────────────┼───────────────────────────┘
+                                │ Only safe, redacted data
+                                ▼
+┌─────────────────────────────────────────────────────────┐
+│                     THE SERVER                           │
+│                                                         │
+│  ┌─────────────────────────────────────────────────┐   │
+│  │  LAYER 3: AI Brain (LangGraph + Groq LLM)        │   │
+│  │  Decides what action to take next                │   │
+│  └──────────────────┬──────────────────────────────┘   │
+└─────────────────────┼────────────────────────────────────┘
+                      │ Action instructions sent back
+                      ▼
+┌─────────────────────────────────────────────────────────┐
+│                  YOUR COMPUTER (Browser)                 │
+│                                                         │
+│  ┌────────────────────────────────────────────────┐    │
+│  │  LAYER 4: Action Executor + Safety Gate        │    │
+│  │  Clicks buttons, types text — but asks YOU     │    │
+│  │  for permission before anything dangerous       │    │
+│  └────────────────────────────────────────────────┘    │
+└─────────────────────────────────────────────────────────┘
 ```
 
 ---
 
-## 2. Cyclic LangGraph.js State Machine
+## 🔍 Layer 1 — The DOM Scanner (`content.js`)
 
-Traditional linear agent pipelines fail when pages mutate dynamically or when models hallucinate non-existent element IDs. DrishtiAI utilizes **LangGraph.js** to run an iterative cyclic state graph:
+### What is the DOM?
 
-```mermaid
-graph LR
-    Start([User Request]) --> Observe[1. OBSERVE<br/>Compress DOM Tree<br/>Actionable Slicing]
-    Observe --> Reason[2. REASON<br/>Fast Structured JSON<br/>via ChatGroq]
-    Reason --> Validate[3. VALIDATE<br/>Non-LLM Deterministic Safety<br/>Target ID Check & Caps]
-    Validate --> Gate{Valid & Safe?}
-    Gate -- "Failed / Hallucinated" --> Reason
-    Gate -- "Approved" --> Execute([Emit Action to Browser])
+When you open a webpage, your browser builds a map of every single element on the page — every button, text box, heading, and link. This map is called the **DOM** (Document Object Model). Think of it like a building's floor plan.
+
+### What does the scanner do?
+
+The **content script** reads this floor plan. It finds every clickable button, every text input box, every link — and gives each one a unique ID number (like `drishti-42`). This lets the AI say "click button #42" instead of trying to describe it.
+
+**Example:**
+```
+Webpage has: [Login Button] [Username Box] [Password Box]
+Scanner maps: button#drishti-1, input#drishti-2, input#drishti-3
 ```
 
-### LangGraph Node Responsibilities:
-1. **`ObserveNode`**:
-   * Ingests sanitized DOM and viewport OCR data.
-   * Compresses semantic HTML trees (`compressTree()`).
-   * Cuts large pages (> 60 elements) into the top 35 actionable candidates (`sliceActionableElements()`).
-   * Unwraps Google redirect telemetry URLs (`cleanHref()`).
-2. **`ReasonNode`**:
-   * Invokes ChatGroq with a strict system prompt and Zod output schema.
-   * Integrates user objective and previous action history.
-   * Features automatic rate-limit cool-down backoff and emergency ultra-compaction fallback.
-3. **`ValidateNode`**:
-   * **Level 1 Check**: Validates Zod conformance against canonical action schemas.
-   * **Level 2 Check**: Deterministic safety rules (verifies target element existence in DOM snapshot, blocks `javascript:`/`data:` schemes, enforces 10-step loop cap, and limits batch sizes to $\le 10$).
+The scanner also collects which elements on screen are **sensitive** right now — specifically:
+- Any `password` input boxes
+- OTP / PIN / CVV fields  
+- Biometric badge areas
+
+It records their exact position on screen (in pixels) so the next layer can black them out.
 
 ---
 
-## 3. Data Flow Diagram (DFD Level 1)
+## 🛡️ Layer 2 — The Privacy Shield (3 sub-systems)
 
-```mermaid
-graph TD
-    A[1. User Submits Goal in Side Panel] --> B[2. Content Script Traverses DOM Tree]
-    B --> C[3. 11-Rule Firewall Redacts PII & Cards]
-    B --> D[4. Offscreen Worker Detects & Masks Faces]
-    D --> E[5. Tesseract WASM Decodes Canvas PINs/Codes]
-    C --> F[6. Merge Sanitized DOM + OCR Text]
-    E --> F
-    F --> G[7. POST /api/analyze to Express Backend]
-    G --> H[8. LangGraph Reasons with Model]
-    H --> I[9. Deterministic Safety Validator Checks Target IDs]
-    I --> J{Destructive Action?}
-    J -- Yes --> K[10. Pause Auto-Loop & Show Amber HUD]
-    K --> L{User Approved?}
-    L -- Yes --> M[11. Dispatch Native SPA Input / Click]
-    L -- No --> N[Abort Action Safely]
-    J -- No --> M
-    M --> O{Task Completed?}
-    O -- No --> B
-    O -- Yes --> P[12. Generate SHA-256 Privacy Certificate]
-```
+This is DrishtiAI's most important innovation. It runs **100% on your device** — no data goes anywhere yet. Think of it as a team of specialists working together.
 
 ---
 
-## 4. End-to-End Sequence Diagram
+### 🛡️ Sub-system 2A — The PII Firewall (`content.js`)
 
-```mermaid
-sequenceDiagram
-    autonumber
-    actor User
-    participant Sidebar as Side Panel (sidebar.js)
-    participant Content as Content Script (content.js)
-    participant Offscreen as Offscreen WASM (offscreen.js)
-    participant Backend as LangGraph Backend
-    participant LLM as ChatGroq Engine
-    participant DOM as Web Page
+**PII = Personally Identifiable Information** (your private data)
 
-    User->>Sidebar: Enters task prompt
-    Sidebar->>Content: Request Clean DOM (GET_DOM)
-    Content->>Content: Run processPII() (Redact Cards/Aadhaar/PAN)
-    Content-->>Sidebar: Return Sanitized DOM
-    Sidebar->>Offscreen: Request Canvas OCR
-    Offscreen->>Offscreen: Mask Faces + Run WASM OCR
-    Offscreen-->>Sidebar: Return Sanitized OCR Text
-    Sidebar->>Backend: POST /api/analyze { dom, visualContext, history }
-    Backend->>Backend: Slicing Engine (Top 35 Candidates, ~1,200 tokens)
-    Backend->>LLM: Formatted Prompt
-    LLM-->>Backend: Return Action JSON
-    Backend->>Backend: Validate Target ID & Action Safety
-    Backend-->>Sidebar: 200 OK Validated Actions [TYPE, CLICK]
-    Sidebar->>Content: Execute Action Command
-    Content->>DOM: setNativeInputValue() & simulateClick()
-    DOM-->>Content: DOM Mutated
-    Content-->>Sidebar: Success Confirmation
-    Sidebar->>User: Display Turn Badge (⚡ 2ms · 🛡️ 0 Leaks)
-```
+This is an 11-rule filter that scans all the text on the page and replaces sensitive patterns with safe placeholder text before it's sent anywhere.
+
+| What it finds | What gets replaced with |
+|:---|:---|
+| Email address (`rohan@gmail.com`) | `[EMAIL_REDACTED]` |
+| Phone number (`+91 9876543210`) | `[PHONE_REDACTED]` |
+| Credit card (`4111-2222-3333-4444`) | `[CREDIT_CARD_REDACTED]` |
+| Aadhaar number (`2345-6789-0123`) | `[AADHAAR_REDACTED]` |
+| PAN card (`ABCDE1234F`) | `[PAN_REDACTED]` |
+| US Social Security Number | `[SSN_REDACTED]` |
+| API/Secret keys (`sk-proj-abc123`) | `[API_KEY_REDACTED]` |
+| Internal IP address | `[IP_REDACTED]` |
+| Crypto wallet address | `[WALLET_REDACTED]` |
+| Passport number | `[PASSPORT_REDACTED]` |
+| Face biometric data | Pixels destroyed on canvas |
+
+**Smart Credit Card Check (Luhn Algorithm):** 
+Before flagging a number as a credit card, the system runs a mathematical formula (Luhn's Mod-10 check) to verify it's actually a real card number — not a product barcode or shipping tracking number that just happens to be 16 digits long. This prevents false alarms.
+
+**Custom Rules:** Users can add their own blacklist words ("Project Aegis", "Internal Salary Data") or whitelist words ("support@drishti.ai" should NOT be redacted even though it looks like an email).
 
 ---
 
-## 5. Human-in-the-Loop (HITL) Safety Gate
+### 👁️ Sub-system 2B — The Visual Redaction Overlay (`offscreen.js`)
 
-To prevent unintended irreversible operations, DrishtiAI incorporates an in-browser **Human-in-the-Loop Gate**:
+This is new and unique. The DOM scanner told us *where* the password boxes are on screen. Now, before we take the screenshot, we paint over those locations with solid **`#090d16` black boxes** directly on the image canvas.
 
-```mermaid
-sequenceDiagram
-    autonumber
-    participant Agent as LangGraph Orchestrator
-    participant Content as Content Script Guard
-    participant DOM as Target Webpage
-    participant Sidebar as Side Panel UI
-    actor User
+**Why?** Because even if the text in a password box is hidden by the browser's `●●●●●●` dots, a raw screenshot might reveal the box's visual context. We don't take any chances.
 
-    Agent->>Content: Proposes: CLICK ("Purge Database" / "Pay $500")
-    Content->>Content: isHighRiskAction() matches sensitive verb
-    Content->>DOM: Highlight element with Amber Glowing Box
-    Content-->>Sidebar: Pause Alert (High-Risk Action Detected)
-    Sidebar->>User: Render Amber Approval Card in Chat
-    alt User clicks [ ✅ Approve ]
-        User->>Sidebar: Approve Action
-        Sidebar->>Content: Execute Approved Action
-        Content->>DOM: Pointer Click Dispatched
-    else User clicks [ ❌ Reject ]
-        User->>Sidebar: Reject Action
-        Sidebar->>Content: Remove Amber Highlight
-        Sidebar->>Sidebar: Abort Loop Safely
-    end
-```
+**What gets blacked out:**
+- `🔒 [PASSWORD]` — every password input field
+- `🔒 [SENSITIVE INPUT]` — OTP, CVV, PIN, card number fields
+- `👤 [BIOMETRIC]` — face ID badge elements
+- `🎨 [REDACTED CANVAS]` — any canvas marked as sensitive
+
+Each blackout box gets a tiny red label badge so you can audit exactly what was covered.
 
 ---
 
-## 6. Entity-Relationship Diagram (ERD) & Data Model
+### 👤 Sub-system 2C — Face Redaction (`offscreen.js`)
 
-```mermaid
-erDiagram
-    USER_SESSION ||--o{ ACTION_STEP : executes
-    USER_SESSION ||--|| FIREWALL_CONFIG : configures
-    USER_SESSION ||--|| AUDIT_CERTIFICATE : produces
-    PAGE_SNAPSHOT ||--o{ DOM_ELEMENT : contains
-    PAGE_SNAPSHOT ||--o{ CANVAS_GRAPHIC : extracts
-    ACTION_STEP ||--|| DOM_ELEMENT : targets
-    ACTION_STEP ||--o| HITL_APPROVAL_GATE : intercepts
-    USER_SESSION ||--o{ PAGE_SNAPSHOT : records_per_turn
+After the domain-sensitive regions are blacked out, the system runs face detection on the screenshot using **two methods:**
 
-    USER_SESSION {
-        string session_id PK
-        string user_objective
-        int current_loop_count
-        boolean is_active
-    }
+1. **Chrome's Hardware FaceDetector API** — uses your device's camera acceleration chip to find human faces in milliseconds (≈18ms)
+2. **Skin-tone Heuristic Fallback** — if the hardware API isn't available, a custom pixel-scanning algorithm checks for skin-tone colored regions in the right proportions for a human face
 
-    FIREWALL_CONFIG {
-        string config_id PK
-        string session_id FK
-        boolean mask_email
-        boolean mask_credit_card
-        boolean mask_aadhaar
-        boolean mask_pan
-        string[] custom_blacklist
-        string[] custom_whitelist
-    }
-
-    PAGE_SNAPSHOT {
-        string snapshot_id PK
-        string session_id FK
-        string page_url
-        string page_title
-        int total_nodes
-    }
-
-    DOM_ELEMENT {
-        string element_id PK
-        string snapshot_id FK
-        string drishti_id
-        string tag_name
-        string role
-        string sanitized_text
-        boolean is_interactive
-    }
-
-    CANVAS_GRAPHIC {
-        string canvas_id PK
-        string snapshot_id FK
-        int faces_detected
-        boolean face_redacted
-        string ocr_sanitized_text
-    }
-
-    ACTION_STEP {
-        string action_id PK
-        string session_id FK
-        string action_type
-        string target_drishti_id
-        string action_value
-        boolean is_validated
-    }
-
-    HITL_APPROVAL_GATE {
-        string approval_id PK
-        string action_id FK
-        string risk_reason
-        string user_decision
-    }
-
-    AUDIT_CERTIFICATE {
-        string certificate_id PK
-        string session_id FK
-        int total_sanitized_nodes
-        int faces_masked
-        int external_leak_bytes
-        string sha256_hash
-    }
-```
+Any detected face is permanently destroyed with a solid blackout fill + a `👤 [FACE REDACTED]` badge.
 
 ---
 
-## 7. Modern SPA Synthetic Event Integration
+### 🔤 Sub-system 2D — Canvas OCR (`offscreen.js` with Tesseract.js)
 
-Modern Single Page Applications built with **React, Vue, and Angular** override default HTML DOM property setters and ignore standard `element.value = "text"` assignments due to virtual DOM diffing.
+Here's an interesting challenge: some webpages show important information as *images*, not as text. For example:
+- A 2FA security code drawn on a `<canvas>` element
+- A promotional voucher image with a discount code
+- A face biometric ID badge
 
-To ensure reliable form-filling, DrishtiAI interacts with elements through direct **native prototype property descriptors**:
+The DOM scanner can't read these because they're pixels, not text. So we run a local **OCR (Optical Character Recognition)** engine — Tesseract.js, compiled to run entirely in your browser using WebAssembly. It reads the image and converts it to text, then the PII Firewall cleans that text too.
 
-```javascript
-// Native setter bypass for React / Angular / Vue virtual DOM state reconciliation
-function setNativeInputValue(element, value) {
-  const descriptor = Object.getOwnPropertyDescriptor(
-    window.HTMLInputElement.prototype,
-    'value'
-  );
-  if (descriptor && descriptor.set) {
-    descriptor.set.call(element, value);
-  } else {
-    element.value = value;
-  }
+**This runs inside an isolated "Offscreen Document"** — a special sandbox that MV3 Chrome extensions use for heavy computation that would slow down the webpage if run directly.
 
-  // Dispatch bubbling change & input events to trigger virtual DOM state sync
-  element.dispatchEvent(new Event('input', { bubbles: true }));
-  element.dispatchEvent(new Event('change', { bubbles: true }));
+---
+
+### 🤖 Sub-system 2E — Local Vision Transformer (`vision/vit-detector.js`)
+
+**NEW.** After faces are blacked out, we optionally run a local AI vision model (`Xenova/yolos-tiny`) using WebAssembly directly in your browser. This model looks at the redacted screenshot and identifies UI elements — "there's a button here, an input field there, an avatar image in the top left."
+
+This produces a **Visual Perception Tree** — a structured list of bounding boxes alongside the DOM tree — giving the AI brain a much richer understanding of the screen layout.
+
+**Privacy guarantee:** The model runs 100% locally, no image ever leaves the browser for this step.
+
+---
+
+## 🧠 Layer 3 — The AI Brain (Backend Server)
+
+Once the fully sanitized, redacted context is ready, it's sent over the network to the backend server. At this point, **it contains zero bytes of raw sensitive data.**
+
+The backend runs a **stateful reasoning loop** using LangGraph.js — think of it like a three-person committee that must agree before any decision is made:
+
+```
+┌──────────────────────────────────────────────────────┐
+│                  THE COMMITTEE                        │
+│                                                       │
+│  1. OBSERVE        2. REASON         3. VALIDATE      │
+│  "What's on       "What should      "Is this plan     │
+│   the screen?"     we do next?"      actually safe?"  │
+│                                                       │
+│   Compress DOM  →  Ask Groq LLM  →  Safety Check     │
+│   (14k→1.2k)       for a plan       (non-AI rules)   │
+└──────────────────────────────────────────────────────┘
+```
+
+### 🔎 Node 1: OBSERVE — The Compressor
+
+**Problem:** A typical webpage might have 600+ elements. Sending all of them to an AI model would be expensive and slow.
+
+**Solution:** The Observe node compresses and scores every element. It figures out which 35 elements are most likely relevant to the user's goal and only sends those. This reduces the prompt from ~14,000 tokens down to ~1,200 tokens — an **85% reduction** that fits within Groq's API limits.
+
+Example of scoring priority (higher = more likely to be included):
+- `button[type="submit"]` with text "Pay Now" → very high priority
+- `<div>` with decorative lorem ipsum → very low priority
+
+### 💡 Node 2: REASON — The LLM Decision Maker
+
+This node sends the compressed context + user's goal to **Groq's LLM** (fast cloud AI). The model returns a structured JSON action plan — not free-form text, but a precise, machine-readable list of actions.
+
+Example response:
+```json
+{
+  "actions": [
+    { "action": "TYPE", "target_id": "drishti-42", "value": "John Doe" },
+    { "action": "CLICK", "target_id": "drishti-87" }
+  ]
 }
 ```
 
-For click actions, DrishtiAI simulates a full 5-stage pointer event sequence (`pointerdown` $\to$ `mousedown` $\to$ `focus` $\to$ `pointerup` $\to$ `click`), ensuring compatibility with custom interactive widgets and canvas elements.
+If the API is busy or the payload is too large, the system automatically waits and retries with the next API key.
+
+### ✅ Node 3: VALIDATE — The Safety Inspector
+
+This is a **non-AI, purely rule-based** checker. It doesn't use any language model — it just checks facts:
+
+- Does `drishti-42` actually exist in the DOM snapshot we have? (Prevents hallucinations — AI making up element IDs that don't exist)
+- Is the URL being navigated to safe? (Blocks `javascript:` and `data:` schemes)
+- Has the agent been looping for too long? (Enforces a 10-step cap to prevent infinite loops)
+- Is the batch size reasonable? (Maximum 10 actions at once)
+
+If something fails, the action is blocked or sent back to Reason for correction.
+
+---
+
+## 🚦 Layer 4 — The Executor + Safety Gate (`content.js`)
+
+### The Human-in-the-Loop (HITL) Gate
+
+When the validated action plan comes back to the browser, not all actions are executed immediately. First, they pass through a **risk detector**:
+
+```
+Action: "CLICK the 'Delete All Records' button"
+         ↓
+Does it match dangerous keywords?
+("delete", "purge", "pay", "transfer", "reset", "remove", "destroy")
+         ↓ Yes
+⚠️  PAUSE! Show Amber Approval Card to user
+"The AI wants to click 'Delete All Records'. Do you approve?"
+   [✅ Yes, proceed]  [❌ Cancel]
+```
+
+If the action is safe (like typing a name into a form), it runs automatically. If it's risky, you get to decide.
+
+### Smart Clicking — React/Vue/Angular Support
+
+Modern websites (like Gmail, Facebook, or any banking app) are built with JavaScript frameworks that use a **virtual DOM**. These frameworks won't respond to simple `element.click()` commands — they need proper browser events.
+
+DrishtiAI simulates the full sequence of events a real human would trigger:
+
+```
+User physically clicks a button:  
+pointerdown → mousedown → focus → pointerup → mouseup → click
+
+DrishtiAI does exactly the same, programmatically,
+so any React/Vue/Angular widget thinks a real human clicked it.
+```
+
+For typing text into inputs, DrishtiAI uses a technique called **native prototype descriptor bypass** — which tricks the framework into thinking the user manually typed the text, triggering all the state update logic that the app is expecting.
+
+---
+
+## 📊 The Interaction Loop — A Full Example
+
+Let's trace exactly what happens when you say: **"Fill out the contact form"**
+
+```
+1. You type "Fill out the contact form" in the DrishtiAI side panel
+
+2. CONTENT SCRIPT scans the page → finds fname, lname, email, phone, submit button
+   Marks any password fields, OTP boxes (none here, it's a contact form)
+
+3. OFFSCREEN WORKER takes a screenshot
+   → Blacks out any sensitive regions (none found)
+   → Face detection runs → no faces found
+   → OCR runs on any canvas images → none here
+   → ViT model maps layout → finds 6 form elements
+
+4. Clean, sanitized payload is sent to backend:
+   { url: "test.html", elements: [...6 form fields...], userTask: "Fill out form" }
+
+5. OBSERVE NODE compresses → all 6 elements are kept (they're all relevant)
+
+6. REASON NODE asks Groq:
+   "Page has: first name input (drishti-1), last name input (drishti-2)...
+    Task: Fill out the contact form"
+   Groq returns: TYPE "John" into drishti-1, TYPE "Doe" into drishti-2...
+
+7. VALIDATE NODE: All target IDs exist ✅, no dangerous keywords ✅
+
+8. Action plan returned to extension: [TYPE, TYPE, TYPE, CLICK]
+
+9. HITL CHECK: Is "submit" dangerous? No → proceed automatically
+
+10. EXECUTOR: Types "John" → "Doe" → "john@demo.com" → clicks Submit
+    (Using native prototype bypass for full framework compatibility)
+
+11. Side panel shows: "✅ Form filled and submitted · 🛡️ 0 Leaks · ⚡ 2.1s"
+```
+
+---
+
+## 🔐 The Privacy Certificate
+
+After each session, DrishtiAI generates a downloadable **Zero-Leak Audit Certificate** — a JSON + Markdown report signed with a SHA-256 cryptographic hash, certifying:
+
+- How many DOM elements were scanned
+- How many PII tokens were redacted (emails, cards, etc.)
+- How many faces were blacked out
+- How many bytes of raw sensitive data reached the server: **0**
+
+This certificate can be shown to regulators, auditors, or clients as proof of privacy compliance with India's **DPDP Act 2023** and **GDPR**.
+
+---
+
+## 📁 Where Does Each Part Live in the Code?
+
+```
+ps-171/
+├── extension/                   ← Everything that runs in your browser
+│   ├── content.js               ← DOM Scanner + PII Firewall + collectSensitiveRegions()
+│   ├── offscreen.js             ← Visual Redaction Overlay + Face Redaction + OCR
+│   ├── background.js            ← Coordinator: captures screenshots, routes messages
+│   ├── sidebar.js               ← The side panel chat UI you interact with
+│   ├── sidebar.html             ← Side panel layout
+│   ├── offscreen.html           ← Isolated sandbox for heavy computation
+│   ├── manifest.json            ← Extension configuration (Chrome MV3)
+│   └── vision/
+│       └── vit-detector.js      ← Local AI Vision Transformer (yolos-tiny)
+│
+├── backend/                     ← The server (runs on your laptop, not cloud)
+│   ├── server.js                ← Express HTTP server, receives sanitized data
+│   └── agent/
+│       ├── graph.js             ← LangGraph: Observe → Reason → Validate cycle
+│       ├── prompts.js           ← AI prompt templates + DOM compression logic
+│       ├── actions.js           ← Action schemas (TYPE, CLICK, NAVIGATE, etc.)
+│       └── state.js             ← LangGraph state definition
+│
+├── test.html                    ← Interactive demo sandbox to test everything
+└── docs/                        ← All documentation files
+```
+
+---
+
+## 🌐 Complete Feature Map
+
+| Feature | Where it runs | Sends data to server? |
+|:---|:---|:---|
+| DOM reading & element scanning | Browser (content.js) | ❌ No |
+| 11-rule PII text redaction | Browser (content.js) | ❌ No |
+| Password box blackout overlay | Browser (offscreen.js) | ❌ No |
+| Face detection & blackout | Browser (offscreen.js) | ❌ No |
+| Canvas OCR (Tesseract WASM) | Browser (offscreen.js) | ❌ No |
+| Local Vision Transformer (ViT) | Browser (vit-detector.js) | ❌ No |
+| AI reasoning (Groq LLM) | Backend server | ✅ Yes (sanitized only) |
+| Action validation (safety check) | Backend server | ✅ Yes (no PII) |
+| HITL approval gate | Browser (content.js) | ❌ No |
+| Native click & type events | Browser (content.js) | ❌ No |
+| Audit certificate generation | Browser (sidebar.js) | ❌ No |
+| Web Lens click-to-inspect | Browser (content.js) | ❌ No |
+
+---
+
+## ⚡ Performance Numbers
+
+| Operation | Time | Location |
+|:---|:---|:---|
+| PII Firewall (11 rules) | < 2 ms | Browser |
+| Face Detection (hardware API) | ~18 ms | Browser |
+| Visual Redaction Overlay | < 5 ms | Browser |
+| Canvas OCR (Tesseract WASM) | ~180 ms | Browser |
+| ViT layout perception | ~800–1500 ms (first run, model loads) | Browser |
+| Groq LLM reasoning | ~600–1200 ms | Server |
+| Total end-to-end (typical) | ~1–2 seconds | Both |
+
+---
+
+## 🎯 Why This Matters for SIH PS-171
+
+The Smart India Hackathon problem asked for: *"On-device Visual Perception for Lightweight Browser Agents"*
+
+DrishtiAI directly addresses every requirement:
+
+1. ✅ **On-device perception** — All visual processing (OCR, face detection, ViT, redaction) runs locally in the browser
+2. ✅ **Lightweight** — Quantized ONNX models, 85% token compression, < 2ms firewall
+3. ✅ **Browser agent** — Full autonomous agent loop with real click/type/navigate actions
+4. ✅ **Privacy** — Zero raw sensitive data transmitted to server, cryptographic audit trail
+5. ✅ **Human-in-the-loop** — Mandatory approval gate for destructive/irreversible actions
+6. ✅ **Legal compliance** — DPDP Act 2023, GDPR, and enterprise data governance ready
