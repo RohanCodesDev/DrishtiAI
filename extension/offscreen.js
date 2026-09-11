@@ -218,6 +218,67 @@ function detectFacialRegionsHeuristic(ctx, width, height) {
   }
 }
 
+/**
+ * Visual Redaction Overlay
+ * Draws solid #090d16 blackout boxes over every sensitive DOM region on the
+ * already-loaded canvas. Must be called AFTER face redaction, BEFORE OCR.
+ *
+ * @param {HTMLCanvasElement} canvas  - the working canvas
+ * @param {CanvasRenderingContext2D} ctx
+ * @param {Array<{x,y,width,height,label}>} regions - viewport-space rects from content.js
+ * @param {number} scale  - canvas scale factor (canvas.width / viewport.width)
+ */
+function applyVisualRedactionOverlay(canvas, ctx, regions, scale) {
+  if (!regions || regions.length === 0) return;
+
+  const BLACKOUT_FILL  = '#090d16';
+  const BADGE_BG       = '#dc2626';
+  const BADGE_TEXT_CLR = '#ffffff';
+  const BORDER_CLR     = '#ef4444';
+
+  console.log(`[DrishtiAI Redaction] 🛡️ Applying visual overlay: ${regions.length} sensitive region(s)...`);
+
+  for (const region of regions) {
+    const rx = Math.round(region.x * scale);
+    const ry = Math.round(region.y * scale);
+    const rw = Math.round(region.width  * scale);
+    const rh = Math.round(region.height * scale);
+
+    // Guard: skip if rect would be off-canvas
+    if (rx >= canvas.width || ry >= canvas.height || rw < 1 || rh < 1) continue;
+
+    console.log(`[DrishtiAI Redaction]   Region [${region.label}] @ canvas (${rx}, ${ry}, ${rw}×${rh})`);
+
+    // Solid blackout fill
+    ctx.fillStyle = BLACKOUT_FILL;
+    ctx.fillRect(rx, ry, rw, rh);
+
+    // Security border
+    ctx.strokeStyle = BORDER_CLR;
+    ctx.lineWidth   = Math.max(2, Math.round(2 * scale));
+    ctx.strokeRect(rx, ry, rw, rh);
+
+    // Label badge (top-left corner)
+    const badgeH = Math.max(16, Math.round(20 * scale));
+    const badgeW = Math.min(rw, Math.round(140 * scale));
+    ctx.fillStyle = BADGE_BG;
+    ctx.fillRect(rx, ry, badgeW, badgeH);
+
+    const fontSize = Math.max(9, Math.round(11 * scale));
+    ctx.fillStyle    = BADGE_TEXT_CLR;
+    ctx.font         = `bold ${fontSize}px -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif`;
+    ctx.textBaseline = 'middle';
+    const labelMap   = {
+      password_input:    '🔒 [PASSWORD]',
+      sensitive_input:   '🔒 [SENSITIVE INPUT]',
+      biometric_element: '👤 [BIOMETRIC]',
+      sensitive_canvas:  '🎨 [REDACTED CANVAS]'
+    };
+    const badgeLabel = labelMap[region.label] || `🔒 [${(region.label || 'REDACTED').toUpperCase()}]`;
+    ctx.fillText(badgeLabel, rx + Math.round(5 * scale), ry + badgeH / 2);
+  }
+}
+
 chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
   if (message && message.target === 'offscreen') {
     if (message.type === 'PING') {
@@ -235,8 +296,37 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
 
           // Step 1: Detect and redact human faces from screenshot before OCR/perception
           const faceRedactionResult = await detectAndRedactFaces(message.dataUrl, message.config);
-          const processedDataUrl = faceRedactionResult.dataUrl;
           let totalFacesRedacted = faceRedactionResult.faceCount;
+
+          // Step 2: Apply Visual Redaction Overlay — blackout sensitive DOM regions (passwords,
+          // OTP, CVV, biometric badges) on the canvas BEFORE OCR or ViT inference runs.
+          let processedDataUrl = faceRedactionResult.dataUrl;
+          const sensitiveRegions = Array.isArray(message.sensitiveRegions) ? message.sensitiveRegions : [];
+          if (sensitiveRegions.length > 0) {
+            processedDataUrl = await new Promise((resolve) => {
+              const img = new Image();
+              img.onload = () => {
+                try {
+                  const oc = document.getElementById('vision-canvas') || document.createElement('canvas');
+                  // Reuse same scale logic as detectAndRedactFaces (cap at 1280px wide)
+                  const naturalW = img.naturalWidth || img.width;
+                  const naturalH = img.naturalHeight || img.height;
+                  const scale    = naturalW > 1280 ? (1280 / naturalW) : 1;
+                  oc.width  = Math.round(naturalW * scale);
+                  oc.height = Math.round(naturalH * scale);
+                  const oc_ctx = oc.getContext('2d');
+                  oc_ctx.drawImage(img, 0, 0, oc.width, oc.height);
+                  applyVisualRedactionOverlay(oc, oc_ctx, sensitiveRegions, scale);
+                  resolve(oc.toDataURL('image/png'));
+                } catch (overlayErr) {
+                  console.warn('[DrishtiAI Redaction] Visual overlay error (non-fatal):', overlayErr);
+                  resolve(processedDataUrl); // Fallback to face-redacted image
+                }
+              };
+              img.onerror = () => resolve(processedDataUrl);
+              img.src = processedDataUrl;
+            });
+          }
 
           const w = await getWorker();
           console.log('DrishtiAI: Running OCR recognition on sanitized viewport screenshot...');

@@ -283,6 +283,28 @@ async function captureAndRunOCR(targetTabId, config = null, canvases = []) {
       return '(No visual screenshot available)';
     }
 
+    // Collect sensitive DOM regions at the moment of capture so they can be blacked
+    // out on the canvas before OCR / ViT inference (zero raw pixel leakage).
+    let sensitiveRegions = [];
+    if (targetTabId) {
+      try {
+        const regionsResult = await chrome.scripting.executeScript({
+          target: { tabId: targetTabId },
+          func: () => window.__DrishtiFirewall?.collectSensitiveRegions?.() || []
+        });
+        sensitiveRegions = (regionsResult && regionsResult[0] && Array.isArray(regionsResult[0].result))
+          ? regionsResult[0].result
+          : [];
+        if (sensitiveRegions.length > 0) {
+          console.log(`[DrishtiAI Background] 🔒 Collected ${sensitiveRegions.length} sensitive region(s) to redact:`,
+            sensitiveRegions.map(r => `${r.label}@(${r.x},${r.y},${r.width}x${r.height})`).join(', '));
+        }
+      } catch (regionErr) {
+        // Non-fatal: page may not have content script yet; proceed without regions
+        console.warn('[DrishtiAI Background] Could not collect sensitive regions (non-fatal):', regionErr.message);
+      }
+    }
+
     console.log('[DrishtiAI Background] ⏳ Step 3/3: Running Tesseract OCR in Offscreen Worker...');
     const ocrPromise = new Promise((resolve) => {
       chrome.runtime.sendMessage({
@@ -290,7 +312,8 @@ async function captureAndRunOCR(targetTabId, config = null, canvases = []) {
         type: 'RUN_OCR',
         dataUrl: dataUrl,
         canvases: canvases,
-        config: config
+        config: config,
+        sensitiveRegions: sensitiveRegions
       }, (res) => {
         if (chrome.runtime.lastError) {
           const lastErrMsg = chrome.runtime.lastError.message || 'Offscreen document connection error';

@@ -1103,6 +1103,77 @@ function isHighRiskAction(el, action) {
   return HIGH_RISK_KEYWORDS.some((kw) => textToCheck.includes(kw));
 }
 
+/**
+ * Collect Sensitive Regions
+ * Scans the live DOM for visually-sensitive elements and returns their
+ * viewport-relative bounding rects so the offscreen worker can black them
+ * out on the canvas before running OCR / ViT inference.
+ *
+ * Detected categories:
+ *  - password inputs (type=password)
+ *  - OTP / PIN / CVV / card-number inputs (detected by name/id/class/autocomplete)
+ *  - Numeric financial inputs (tel, number whose name/label suggests PII)
+ *  - Face biometric badge elements (class contains "biometric", "face-id")
+ *  - Elements with data-sensitive="true" attribute
+ */
+function collectSensitiveRegions() {
+  if (typeof document === 'undefined') return [];
+
+  const regions = [];
+
+  // Helper: add a rect if it is visible on screen
+  function addRect(el, label) {
+    if (!el || typeof el.getBoundingClientRect !== 'function') return;
+    const r = el.getBoundingClientRect();
+    // Skip zero-size or fully off-screen elements
+    if (r.width < 4 || r.height < 4) return;
+    if (r.bottom < 0 || r.top > window.innerHeight) return;
+    if (r.right < 0 || r.left > window.innerWidth) return;
+    regions.push({
+      x: Math.round(r.left),
+      y: Math.round(r.top),
+      width: Math.round(r.width),
+      height: Math.round(r.height),
+      label
+    });
+  }
+
+  // 1. All password input fields
+  document.querySelectorAll('input[type="password"]').forEach(el => addRect(el, 'password_input'));
+
+  // 2. OTP / PIN / CVV / card-number inputs — by autocomplete attribute
+  const sensitiveAutocomplete = ['one-time-code', 'cc-number', 'cc-csc', 'cc-exp', 'cc-exp-month', 'cc-exp-year'];
+  sensitiveAutocomplete.forEach(ac => {
+    document.querySelectorAll(`input[autocomplete="${ac}"]`).forEach(el => addRect(el, `autocomplete_${ac}`));
+  });
+
+  // 3. Inputs whose name / id / class / placeholder suggest sensitive PII
+  const SENSITIVE_PATTERNS = /otp|pin\b|cvv|cvc|card.?num|aadhaar|aadhar|pan.?card|ssn|secret|passphrase|token|auth.?code|biometric/i;
+  document.querySelectorAll('input[type="text"], input[type="number"], input[type="tel"], input:not([type])').forEach(el => {
+    const haystack = [
+      el.name || '',
+      el.id || '',
+      el.className || '',
+      el.getAttribute('placeholder') || '',
+      el.getAttribute('aria-label') || '',
+      el.getAttribute('data-field') || ''
+    ].join(' ');
+    if (SENSITIVE_PATTERNS.test(haystack)) {
+      addRect(el, 'sensitive_input');
+    }
+  });
+
+  // 4. Biometric / face-id badge elements
+  document.querySelectorAll('[class*="biometric"], [class*="face-id"], [data-sensitive="true"]').forEach(el => {
+    addRect(el, 'biometric_element');
+  });
+
+  // 5. Canvas elements that have been flagged by our OCR system
+  document.querySelectorAll('canvas[data-drishti-sensitive="true"]').forEach(el => addRect(el, 'sensitive_canvas'));
+
+  return regions;
+}
+
 // Global hook for script execution
 if (typeof window !== 'undefined') {
   window.__DRISHTI_VERSION = 2;
@@ -1112,7 +1183,8 @@ if (typeof window !== 'undefined') {
     normalizeFirewallConfig,
     setNativeInputValue,
     simulateClick,
-    isHighRiskAction
+    isHighRiskAction,
+    collectSensitiveRegions
   };
 }
 
