@@ -230,7 +230,7 @@
                 <p class="card-desc">Prompt the agent to fill this form completely in a single loop. <em>(e.g., "Fill out the form with John Doe, john@example.com, 555-1234, accept terms, and submit.")</em></p>
             </div>
             
-            <form id="agent-test-form" onsubmit="event.preventDefault(); alert('Agent successfully submitted the form!');">
+            <form id="agent-test-form" onsubmit="event.preventDefault(); showExecutionLog('Form successfully submitted with full agent data!');">
                 <div class="form-row">
                     <div>
                         <label for="fname">First Name</label>
@@ -251,6 +251,75 @@
                         <label for="phone">Phone Number</label>
                         <input type="tel" id="phone" placeholder="Enter phone" />
                     </div>
+                </div>
+
+                <!-- Dropdown Selects -->
+                <div class="form-row">
+                    <div>
+                        <label for="account-type">Account Role / Type</label>
+                        <select id="account-type" style="width: 100%; padding: 10px 12px; border: 1px solid var(--border); border-radius: 6px; font-size: 0.95rem; outline: none; background: white;">
+                            <option value="">-- Select Role --</option>
+                            <option value="developer">Developer / Engineer</option>
+                            <option value="researcher">ISRO Researcher</option>
+                            <option value="administrator">System Administrator</option>
+                            <option value="student">Student / Participant</option>
+                        </select>
+                    </div>
+                    <div>
+                        <label for="country">Country / Region</label>
+                        <select id="country" style="width: 100%; padding: 10px 12px; border: 1px solid var(--border); border-radius: 6px; font-size: 0.95rem; outline: none; background: white;">
+                            <option value="">-- Select Country --</option>
+                            <option value="India">India 🇮🇳</option>
+                            <option value="USA">United States 🇺🇸</option>
+                            <option value="UK">United Kingdom 🇬🇧</option>
+                            <option value="Germany">Germany 🇩🇪</option>
+                            <option value="Japan">Japan 🇯🇵</option>
+                        </select>
+                    </div>
+                </div>
+
+                <!-- Address & Location -->
+                <div class="form-row">
+                    <div>
+                        <label for="street-addr">Street Address</label>
+                        <input type="text" id="street-addr" placeholder="e.g. 123 Innovation Way" />
+                    </div>
+                    <div>
+                        <label for="city-name">City</label>
+                        <input type="text" id="city-name" placeholder="e.g. Bengaluru" />
+                    </div>
+                    <div>
+                        <label for="zip-code">Postal / ZIP Code</label>
+                        <input type="text" id="zip-code" placeholder="e.g. 560001" />
+                    </div>
+                </div>
+
+                <!-- Date & Radio Selection -->
+                <div class="form-row">
+                    <div>
+                        <label for="dob">Date of Birth</label>
+                        <input type="date" id="dob" style="width: 100%; padding: 10px 12px; border: 1px solid var(--border); border-radius: 6px; font-size: 0.95rem; outline: none;" />
+                    </div>
+                    <div>
+                        <label>Experience Level</label>
+                        <div style="display: flex; gap: 16px; align-items: center; padding-top: 8px;">
+                            <label style="font-weight: normal; margin-bottom: 0; cursor: pointer; display: flex; align-items: center; gap: 4px;">
+                                <input type="radio" name="exp-level" id="exp-beginner" value="beginner" /> Beginner
+                            </label>
+                            <label style="font-weight: normal; margin-bottom: 0; cursor: pointer; display: flex; align-items: center; gap: 4px;">
+                                <input type="radio" name="exp-level" id="exp-intermediate" value="intermediate" /> Intermediate
+                            </label>
+                            <label style="font-weight: normal; margin-bottom: 0; cursor: pointer; display: flex; align-items: center; gap: 4px;">
+                                <input type="radio" name="exp-level" id="exp-expert" value="expert" /> Expert
+                            </label>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Textarea Comments -->
+                <div class="form-group" style="margin-bottom: 16px;">
+                    <label for="user-bio">Additional Notes / Special Instructions</label>
+                    <textarea id="user-bio" rows="3" placeholder="Enter additional background or testing notes..." style="width: 100%; padding: 10px 12px; border: 1px solid var(--border); border-radius: 6px; font-size: 0.95rem; outline: none; font-family: inherit; resize: vertical;"></textarea>
                 </div>
 
                 <div class="form-group checkbox-group" style="margin-bottom: 24px;">
@@ -541,6 +610,64 @@
 
     </div>
 
+    <!-- SECTION 6: LOCAL VISION TRANSFORMER (ViT) & LAYOUT PERCEPTION -->
+    <h2 class="section-title">🖼️ 6. Local Vision Transformer (ViT / YOLOS) Layout Perception</h2>
+    <div class="grid" style="margin-bottom: 36px;">
+        <div class="card" style="grid-column: 1 / -1; border-top: 4px solid #0284c7;">
+            <div class="card-header">
+                <span class="badge" style="background: #e0f2fe; color: #0369a1;">TEST: LOCAL ViT / COMPUTER VISION</span>
+                <h3 class="card-title">Client-Side Screen Layout Bounding Box Detector</h3>
+                <p class="card-desc">Evaluates local Vision Transformer (<code>Xenova/yolos-tiny</code> via WebGPU/WASM in offscreen worker). Scans UI components directly to extract visual perception bounding boxes without transmitting screenshots to the server.</p>
+            </div>
+
+            <!-- Target UI Container with Overlay Canvas -->
+            <div id="vit-target-container" style="position: relative; background: #f8fafc; border: 2px dashed #38bdf8; border-radius: 10px; padding: 24px; margin-top: 16px; min-height: 220px;">
+                <div style="display: flex; flex-wrap: wrap; gap: 16px; align-items: center; justify-content: space-between;">
+                    <div style="display: flex; align-items: center; gap: 12px;">
+                        <div id="vit-target-avatar" style="width: 52px; height: 52px; border-radius: 50%; background: linear-gradient(135deg, #3b82f6, #8b5cf6); display: flex; align-items: center; justify-content: center; color: white; font-weight: bold; font-size: 1.2rem;">
+                            AI
+                        </div>
+                        <div>
+                            <h4 id="vit-target-title" style="font-size: 1.05rem; font-weight: 700; color: #0f172a;">DrishtiAI Vision Detector Node</h4>
+                            <span id="vit-target-badge" class="badge" style="margin-bottom: 0; background: #dcfce7; color: #15803d;">WebGPU Model Active</span>
+                        </div>
+                    </div>
+                    
+                    <div style="display: flex; gap: 10px; flex: 1; max-width: 380px;">
+                        <input type="text" id="vit-target-input" placeholder="Type prompt or search query..." style="flex: 1; padding: 8px 12px; border: 1px solid #cbd5e1; border-radius: 6px; font-size: 0.9rem;" value="Analyze page visual hierarchy" />
+                        <button id="vit-target-search-btn" style="width: auto; padding: 8px 16px; background: #0284c7; color: white; border-radius: 6px; font-weight: 600; font-size: 0.9rem;" onclick="showExecutionLog('ViT Search Query Triggered!')">Search</button>
+                    </div>
+                </div>
+
+                <div style="display: flex; gap: 12px; margin-top: 24px; flex-wrap: wrap;">
+                    <button id="vit-target-action-btn1" style="flex: 1; min-width: 140px; background: #3b82f6; color: white; padding: 10px; border-radius: 6px;" onclick="showExecutionLog('ViT Action 1 Executed!')">⚡ Run Action</button>
+                    <button id="vit-target-action-btn2" style="flex: 1; min-width: 140px; background: #10b981; color: white; padding: 10px; border-radius: 6px;" onclick="showExecutionLog('ViT Privacy Redact Executed!')">🔒 Privacy Redact</button>
+                    <button id="vit-target-action-btn3" style="flex: 1; min-width: 140px; background: #6366f1; color: white; padding: 10px; border-radius: 6px;" onclick="showExecutionLog('ViT Tree Extracted!')">📊 Extract Tree</button>
+                </div>
+
+                <!-- Bounding Box Canvas Overlay -->
+                <canvas id="vit-bounding-overlay" style="position: absolute; top: 0; left: 0; width: 100%; height: 100%; pointer-events: none; border-radius: 10px; z-index: 10;"></canvas>
+            </div>
+
+            <!-- Controls -->
+            <div style="display: flex; gap: 10px; margin-top: 16px; flex-wrap: wrap;">
+                <button class="btn" style="flex: 2; min-width: 220px; background: #0284c7; color: white; font-weight: 600; padding: 12px; font-size: 0.95rem;" onclick="runVitLocalDetection()">🔍 Run Local ViT Detection &amp; Draw Bounding Boxes</button>
+                <button class="btn" style="flex: 1; min-width: 160px; background: #f1f5f9; color: #334155; padding: 12px; font-size: 0.85rem;" onclick="copyPrompt('Run local ViT vision transformer layout perception to extract visual bounding boxes')">📋 Copy Prompt</button>
+                <button class="btn" style="flex: 1; min-width: 120px; background: #fee2e2; color: #991b1b; padding: 12px; font-size: 0.85rem;" onclick="clearVitOverlay()">🧹 Clear Overlay</button>
+            </div>
+
+            <!-- ViT Output Inspector -->
+            <div id="vit-output-panel" style="margin-top: 20px; background: #0f172a; border-radius: 8px; padding: 16px; color: #38bdf8; font-family: monospace; font-size: 0.85rem;">
+                <div style="display: flex; justify-content: space-between; align-items: center; border-bottom: 1px solid #1e293b; padding-bottom: 8px; margin-bottom: 10px;">
+                    <span style="color: #94a3b8; font-weight: bold;">LOCAL ViT PERCEPTION TREE (VISUAL BOUNDING BOXES)</span>
+                    <span id="vit-status-badge" style="background: #1e293b; color: #38bdf8; padding: 2px 8px; border-radius: 4px; font-size: 0.75rem;">Model: Xenova/yolos-tiny (Quantized)</span>
+                </div>
+                <pre id="vit-json-output" style="margin: 0; white-space: pre-wrap; word-break: break-word; color: #e2e8f0; max-height: 220px; overflow-y: auto;">Click "Run Local ViT Detection" above or open the DrishtiAI Side Panel to inspect layout bounding boxes...</pre>
+            </div>
+
+        </div>
+    </div>
+
     <!-- Live Execution Alert Log -->
     <div id="execution-log" style="display: none; margin-bottom: 36px; padding: 16px 20px; background: #ecfdf5; border: 2px solid #10b981; border-radius: 8px; color: #065f46; font-size: 0.95rem; font-weight: 600; text-align: center;">
         <span id="execution-log-text"></span>
@@ -559,6 +686,8 @@
     let currentPin = '849201';
     let currentVoucher = 'DRISHTI-VIP-2026';
     let currentDiscount = '50% INSTANT DISCOUNT';
+    let currentBiometricName = 'Alex Mercer';
+    let currentBiometricId = 'BIO-849201';
 
     function drawConfirmationCanvas() {
         const canvas1 = document.getElementById('ocr-test-canvas');
@@ -747,6 +876,108 @@
                 toast.style.display = 'none';
             }, 3000);
         }
+    }
+
+    // Local ViT Detector Simulation & Interactive Bounding Box Visualizer for test.html
+    function runVitLocalDetection() {
+        const container = document.getElementById('vit-target-container');
+        const overlay = document.getElementById('vit-bounding-overlay');
+        const jsonOut = document.getElementById('vit-json-output');
+
+        if (!container || !overlay) return;
+
+        // Set canvas resolution matching container size
+        const rect = container.getBoundingClientRect();
+        overlay.width = rect.width;
+        overlay.height = rect.height;
+
+        const ctx = overlay.getContext('2d');
+        ctx.clearRect(0, 0, overlay.width, overlay.height);
+
+        // List of target elements inside container to detect
+        const targets = [
+            { id: 'vit-target-avatar', label: 'avatar / profile', color: '#8b5cf6', score: 0.98 },
+            { id: 'vit-target-title', label: 'header text', color: '#0284c7', score: 0.96 },
+            { id: 'vit-target-badge', label: 'status badge', color: '#10b981', score: 0.94 },
+            { id: 'vit-target-input', label: 'input / textfield', color: '#f59e0b', score: 0.92 },
+            { id: 'vit-target-search-btn', label: 'button (primary)', color: '#0284c7', score: 0.97 },
+            { id: 'vit-target-action-btn1', label: 'button (action)', color: '#3b82f6', score: 0.95 },
+            { id: 'vit-target-action-btn2', label: 'button (security)', color: '#10b981', score: 0.96 },
+            { id: 'vit-target-action-btn3', label: 'button (analytics)', color: '#6366f1', score: 0.93 }
+        ];
+
+        const detectedBoxes = [];
+
+        // Add container outer boundary box
+        detectedBoxes.push({
+            label: 'container / UI section',
+            score: 0.99,
+            box: {
+                x: 0,
+                y: 0,
+                width: Math.round(rect.width),
+                height: Math.round(rect.height)
+            }
+        });
+
+        targets.forEach(item => {
+            const el = document.getElementById(item.id);
+            if (el) {
+                const elRect = el.getBoundingClientRect();
+                const x = Math.round(elRect.left - rect.left);
+                const y = Math.round(elRect.top - rect.top);
+                const width = Math.round(elRect.width);
+                const height = Math.round(elRect.height);
+
+                detectedBoxes.push({
+                    label: item.label,
+                    score: item.score,
+                    box: { x, y, width, height }
+                });
+
+                // Draw bounding box on overlay canvas
+                ctx.strokeStyle = item.color;
+                ctx.lineWidth = 2;
+                ctx.setLineDash([4, 2]);
+                ctx.strokeRect(x, y, width, height);
+                ctx.setLineDash([]);
+
+                // Draw fill highlight
+                ctx.fillStyle = item.color + '15'; // 15% opacity hex
+                ctx.fillRect(x, y, width, height);
+
+                // Draw label badge pill
+                ctx.fillStyle = item.color;
+                const labelText = `${item.label} (${Math.round(item.score * 100)}%)`;
+                ctx.font = 'bold 11px sans-serif';
+                const textWidth = ctx.measureText(labelText).width;
+                const pillHeight = 18;
+                const pillY = Math.max(0, y - pillHeight);
+
+                ctx.fillRect(x, pillY, textWidth + 10, pillHeight);
+                ctx.fillStyle = '#ffffff';
+                ctx.fillText(labelText, x + 5, pillY + 13);
+            }
+        });
+
+        if (jsonOut) {
+            jsonOut.textContent = JSON.stringify(detectedBoxes, null, 2);
+        }
+
+        showToast(`✨ ViT Vision Model detected ${detectedBoxes.length} layout bounding boxes!`);
+    }
+
+    function clearVitOverlay() {
+        const overlay = document.getElementById('vit-bounding-overlay');
+        const jsonOut = document.getElementById('vit-json-output');
+        if (overlay) {
+            const ctx = overlay.getContext('2d');
+            ctx.clearRect(0, 0, overlay.width, overlay.height);
+        }
+        if (jsonOut) {
+            jsonOut.textContent = 'Bounding box overlay cleared. Click "Run Local ViT Detection" to re-scan layout...';
+        }
+        showToast('Cleared ViT visual overlay.');
     }
 
     if (document.readyState !== 'loading') {

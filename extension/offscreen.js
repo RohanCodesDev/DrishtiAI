@@ -289,6 +289,16 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
 
           console.log(`DrishtiAI: OCR & Vision Firewall completed. PII Types: [${piiTypes.join(', ')}], Faces Redacted: ${totalFacesRedacted}`);
 
+          // Step 3: Run ViT Model to get object bounding boxes on redacted image
+          let visualBoundingBoxes = [];
+          if (typeof window.LocalVisionEngine !== 'undefined') {
+            try {
+              visualBoundingBoxes = await window.LocalVisionEngine.detectVisualElements(processedDataUrl);
+            } catch (vErr) {
+              console.warn('DrishtiAI: Local ViT Vision Engine failed:', vErr);
+            }
+          }
+
           sendResponse({
             success: true,
             text: sanitizedText,
@@ -296,7 +306,8 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
             rawLength: rawText.length,
             piiTypes: piiTypes,
             piiCount: piiTypes.length,
-            facesRedacted: totalFacesRedacted
+            facesRedacted: totalFacesRedacted,
+            visualBoundingBoxes: visualBoundingBoxes
           });
         } catch (err) {
           const errorMsg = err?.message || (typeof err === 'string' ? err : JSON.stringify(err)) || 'Unknown OCR Error';

@@ -313,17 +313,17 @@ async function captureAndRunOCR(targetTabId, config = null, canvases = []) {
 
     if (ocrResponse && ocrResponse.success && ocrResponse.text) {
       console.log(`[DrishtiAI Background] ✨ OCR Success! Recognized ${ocrResponse.text.length} chars (Confidence: ${Math.round(ocrResponse.confidence || 0)}%)`);
-      return ocrResponse.text;
+      return { text: ocrResponse.text, visualBoundingBoxes: ocrResponse.visualBoundingBoxes || [] };
     } else if (ocrResponse && ocrResponse.success && !ocrResponse.text) {
       console.log('[DrishtiAI Background] ✨ OCR Completed: No text detected on screen.');
-      return '(No visual text detected on screen)';
+      return { text: '(No visual text detected on screen)', visualBoundingBoxes: ocrResponse.visualBoundingBoxes || [] };
     } else {
       console.warn('[DrishtiAI Background] ⚠️ OCR Failed:', ocrResponse?.error);
-      return '(OCR processing failed: ' + (ocrResponse?.error || 'Unknown error') + ')';
+      return { text: '(OCR processing failed: ' + (ocrResponse?.error || 'Unknown error') + ')', visualBoundingBoxes: [] };
     }
   } catch (visionErr) {
     console.warn('[DrishtiAI Background] Vision OCR skipped or failed:', visionErr.message);
-    return '(OCR capture skipped: ' + visionErr.message + ' - NOTE: If testing on a local file, ensure "Allow access to file URLs" is enabled in chrome://extensions for DrishtiAI)';
+    return { text: '(OCR capture skipped: ' + visionErr.message + ')', visualBoundingBoxes: [] };
   }
 }
 
@@ -374,7 +374,14 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
               domData.visual_context = '';
             }
           } else {
-            domData.visual_context = await captureAndRunOCR(message.tabId, message.config, domData.canvases);
+            const ocrData = await captureAndRunOCR(message.tabId, message.config, domData.canvases);
+            if (typeof ocrData === 'object' && ocrData !== null) {
+              domData.visual_context = ocrData.text;
+              domData.visual_bounding_boxes = ocrData.visualBoundingBoxes || [];
+            } else {
+              domData.visual_context = String(ocrData);
+              domData.visual_bounding_boxes = [];
+            }
           }
         }
         
@@ -422,7 +429,13 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
               });
               if (response && response.success && response.data) {
                 if (!response.data.is_restricted) {
-                  response.data.visual_context = await captureAndRunOCR(tabId, message.config, response.data.canvases);
+                  const ocrData2 = await captureAndRunOCR(tabId, message.config, response.data.canvases);
+                  if (typeof ocrData2 === 'object' && ocrData2 !== null) {
+                    response.data.visual_context = ocrData2.text;
+                    response.data.visual_bounding_boxes = ocrData2.visualBoundingBoxes || [];
+                  } else {
+                    response.data.visual_context = String(ocrData2);
+                  }
                 }
                 sendResponse({ success: true, data: response.data });
                 return;
@@ -434,7 +447,13 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
         }
         const domData = await getTabDOM(tabId, message.config);
         if (!domData.is_restricted) {
-          domData.visual_context = await captureAndRunOCR(tabId, message.config, domData.canvases);
+          const ocrData3 = await captureAndRunOCR(tabId, message.config, domData.canvases);
+          if (typeof ocrData3 === 'object' && ocrData3 !== null) {
+            domData.visual_context = ocrData3.text;
+            domData.visual_bounding_boxes = ocrData3.visualBoundingBoxes || [];
+          } else {
+            domData.visual_context = String(ocrData3);
+          }
         }
         sendResponse({ success: true, data: domData });
       } catch (err) {
