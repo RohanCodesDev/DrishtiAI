@@ -237,6 +237,10 @@ This is a **non-AI, purely rule-based** checker. It doesn't use any language mod
 
 If something fails, the action is blocked or sent back to Reason for correction.
 
+### 🧠 Session Memory (MemorySaver Checkpointer)
+
+To support complex multi-step workflows across an extended browser session, the graph utilizes LangGraph's `MemorySaver` checkpointer. This provides short-term **session-level state**. By tracking a `thread_id`, the agent seamlessly recalls its prior actions, errors, and current objective without relying entirely on the browser extension to repeatedly relay full state histories back and forth.
+
 ---
 
 ## 🚦 Layer 4 — The Executor + Safety Gate (`content.js`)
