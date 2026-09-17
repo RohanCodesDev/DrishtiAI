@@ -1,4 +1,4 @@
-const { StateGraph } = require('@langchain/langgraph');
+const { StateGraph, MemorySaver } = require('@langchain/langgraph');
 const { ChatGroq } = require('@langchain/groq');
 const { HumanMessage, SystemMessage } = require('@langchain/core/messages');
 const { AgentStateAnnotation } = require('./state');
@@ -340,13 +340,15 @@ const workflow = new StateGraph(AgentStateAnnotation)
   .addEdge('reason', 'validate')
   .addEdge('validate', '__end__');
 
-const agentGraph = workflow.compile();
+const checkpointer = new MemorySaver();
+const agentGraph = workflow.compile({ checkpointer });
 
 /**
  * Main execution interface for Express API endpoints.
  */
 async function runAgentGraph(payload) {
   const loopCount = payload.loopCount || (payload.actionHistory ? payload.actionHistory.length + 1 : 1);
+  const threadId = payload.thread_id || "default-session";
 
   const initialState = {
     objective: payload.userTask || 'Analyze page state and determine the next action.',
@@ -365,7 +367,9 @@ async function runAgentGraph(payload) {
     logs: []
   };
 
-  const finalState = await agentGraph.invoke(initialState);
+  const finalState = await agentGraph.invoke(initialState, {
+    configurable: { thread_id: threadId }
+  });
   return finalState;
 }
 
