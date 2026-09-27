@@ -17,6 +17,7 @@
   const agentStatusBadge = document.getElementById('agent-status-badge');
   const agentStatusText = document.getElementById('agent-status-text');
   const newChatBtn = document.getElementById('new-chat-btn');
+  const clearChatBtn = document.getElementById('clear-chat-btn');
   const refreshBtn = document.getElementById('refresh-btn');
   const settingsToggleBtn = document.getElementById('settings-toggle-btn');
   const inspectLensBtn = document.getElementById('inspect-lens-btn');
@@ -681,7 +682,7 @@ ${piiRows}
     applyDOMSearchOrRaw();
   }
 
-  async function loadBoundTabDOM(skipOcr = false, doFullScan = false) {
+  async function loadBoundTabDOM(skipOcr = true, doFullScan = false) {
     if (jsonOutput && !skipOcr) jsonOutput.textContent = 'Extracting structured DOM for active tab...';
     if (elementCountBadge && !skipOcr) {
       elementCountBadge.querySelector('.badge-text').textContent = 'Extracting...';
@@ -1394,8 +1395,10 @@ ${piiRows}
   }
 
   function cancellableDelay(ms) {
+    // Override delay to make the AI work faster but keep 150ms max to prevent UI thread freezing from DOM rebuilds
+    const fastMs = Math.min(ms, 150);
     return new Promise((resolve) => {
-      const timer = setTimeout(resolve, ms);
+      const timer = setTimeout(resolve, fastMs);
       if (agentAbortController) {
         agentAbortController.signal.addEventListener('abort', () => {
           clearTimeout(timer);
@@ -1740,7 +1743,7 @@ ${piiRows}
           await loadBoundTabDOM(true); // Pass true to skip heavy viewport OCR during intermediate steps!
           if (!UI_STATE.isAgentRunning) return;
           executeAgentStep(loopCount + 1, actionHistory);
-        }, 800);
+        }, 200);
       } else {
         UI_STATE.currentTurn.status = 'completed';
         if (!UI_STATE.currentTurn.finalAnswer) {
@@ -1824,7 +1827,7 @@ ${piiRows}
     } else if (pending.action.action === 'SCAN' && success) {
       turn.statusMessage = 'Scanning entire page and stitching visual context...';
       await cancellableDelay(1000);
-      await loadBoundTabDOM(false, true); // true = doFullScan
+      await loadBoundTabDOM(true, false); // Don't do a heavy full scan after every click
       pending.remainingActions = [];
     } else if (pending.action.action === 'SCROLL' && success) {
       await cancellableDelay(150);
@@ -1937,7 +1940,7 @@ ${piiRows}
         await loadBoundTabDOM();
         if (!UI_STATE.isAgentRunning) return;
         executeAgentStep(pending.loopCount + 1, pending.actionHistory);
-      }, 1200);
+      }, 200);
     } else {
       turn.status = 'completed';
       if (!turn.finalAnswer) {
@@ -2149,6 +2152,20 @@ ${piiRows}
         renderAllChatHistory();
         updateAgentStatus('READY');
       });
+
+      if (clearChatBtn) {
+        clearChatBtn.addEventListener('click', async () => {
+          if (UI_STATE.isAgentRunning) stopAgentExecution();
+          UI_STATE.chatHistory = [];
+          UI_STATE.currentTurn = null;
+          const tabId = await getTargetTabId();
+          if (tabId) {
+            await chrome.storage.local.remove([`drishti_chat_history_${tabId}`]);
+          }
+          renderAllChatHistory();
+          updateAgentStatus('READY');
+        });
+      }
     }
 
     // Refresh DOM button

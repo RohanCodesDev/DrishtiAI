@@ -18,7 +18,7 @@ app.get('/api/health', (req, res) => {
   res.json({
     status: 'ok',
     message: 'DrishtiAI Backend running with LangGraph.js + LangChain.js',
-    model: process.env.GROQ_MODEL || 'openai/gpt-oss-120b',
+    model: process.env.GROQ_MODEL || 'openai/gpt-oss-20b',
     framework: 'LangGraph.js'
   });
 });
@@ -113,7 +113,7 @@ app.post('/api/analyze', async (req, res) => {
 if (require.main === module) {
   app.listen(PORT, () => {
     console.log(`🛡️ DrishtiAI LangGraph Backend running on http://localhost:${PORT}`);
-    console.log(`Model: ${process.env.GROQ_MODEL || 'openai/gpt-oss-120b'}`);
+    console.log(`Model: ${process.env.GROQ_MODEL || 'openai/gpt-oss-20b'}`);
     console.log(`Ready to receive sanitized page context on POST /api/analyze`);
   });
 }
